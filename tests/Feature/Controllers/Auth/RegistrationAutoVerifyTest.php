@@ -4,13 +4,10 @@ namespace Tests\Feature\Controllers\Auth;
 
 use App\Http\Controllers\Auth\AuthController;
 use App\Http\Middleware\VerifyCsrfToken;
-use App\Jobs\Career\WcSyncEmailJob;
-use App\Services\WebCareers\HclClient;
+use App\Support\Sinkron\Outbox;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Mockery\MockInterface;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -27,7 +24,7 @@ class RegistrationAutoVerifyTest extends TestCase
         ]);
 
         $this->withoutMiddleware(VerifyCsrfToken::class);
-        Bus::fake();
+        Outbox::palsukan();
 
         Schema::create('N_WEB_CAREERS_Users', function (Blueprint $table) {
             $table->increments('Id_Users');
@@ -45,7 +42,8 @@ class RegistrationAutoVerifyTest extends TestCase
             $table->dateTime('Email_Verified_At')->nullable();
             $table->string('Email_Verif_Token')->nullable();
             $table->dateTime('Email_Verif_Expired_At')->nullable();
-            $table->string('Kode_Calon')->nullable();
+            $table->dateTime('Email_Verif_Sent_At')->nullable();
+            $table->integer('Email_Verif_Attempt')->default(0);
             $table->dateTime('Created_At')->nullable();
             $table->string('Created_By')->nullable();
             $table->dateTime('Updated_At')->nullable();
@@ -66,15 +64,6 @@ class RegistrationAutoVerifyTest extends TestCase
             'Flag_Aktif' => 'Y',
             'Durasi_Hari' => null,
         ]);
-
-        $this->mock(HclClient::class, function (MockInterface $mock) {
-            $mock->shouldReceive('post')->zeroOrMoreTimes()->andReturn([
-                'sukses' => true,
-                'status' => 201,
-                'message' => 'Berhasil',
-                'result' => ['Kode_Calon' => 'CK-TEST-001'],
-            ]);
-        });
     }
 
     protected function tearDown(): void
@@ -104,8 +93,15 @@ class RegistrationAutoVerifyTest extends TestCase
         $this->assertSame('Y', $user->Flag_Email_Verified);
         $this->assertNotNull($user->Email_Verified_At);
         $this->assertNull($user->Email_Verif_Token);
-        $this->assertSame('CK-TEST-001', $user->Kode_Calon);
-        Bus::assertNotDispatched(WcSyncEmailJob::class);
+
+        // Akun baru dikabarkan ke zona dalam (tanpa sandi); tidak ada surel
+        // verifikasi yang diminta karena akunnya sudah terverifikasi otomatis.
+        $terdaftar = Outbox::tercatat(Outbox::AKUN_TERDAFTAR);
+        $this->assertCount(1, $terdaftar);
+        $this->assertSame('dev@example.test', $terdaftar[0]['muatan']['akun']['email']);
+        $this->assertArrayNotHasKey('password', $terdaftar[0]['muatan']['akun']);
+        $this->assertTrue($terdaftar[0]['muatan']['akun']['email_terverifikasi']);
+        $this->assertCount(0, Outbox::tercatat(Outbox::AKUN_KODE_DIMINTA));
     }
 
     public function test_auto_verifikasi_tetap_nonaktif_di_production(): void

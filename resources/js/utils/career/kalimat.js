@@ -132,11 +132,6 @@ export function nilaiKalimat(teks, min, kenal) {
     return '';
 }
 
-/** Tanpa kamus (sinkron) — dipakai bila pemeriksa ejaan tidak dibutuhkan/tersedia. */
-export function periksaKalimat(teks, min = 15) {
-    return nilaiKalimat(teks, min, null);
-}
-
 /**
  * Pemeriksaan LENGKAP dengan kamus nspell. Kamus Indonesia lebih dulu; bila
  * belum lolos, kamus Inggris ikut dimuat dan dinilai ulang — hasil akhirnya

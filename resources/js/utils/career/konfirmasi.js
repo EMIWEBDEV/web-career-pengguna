@@ -8,28 +8,7 @@
  */
 import axios from 'axios';
 
-export const API_AGENDA = '/api/v1/karir/agenda-seleksi';
-export const API_KONFIRMASI = '/api/v1/karir/konfirmasi-jadwal';
-
 const CFG = { headers: { Accept: 'application/json' } };
-
-/** Kanal yang disebut tim saat mencatat jawaban atas nama kandidat. */
-export const KANAL_TIM = [
-    { kode: 'TELEPON', label: 'Telepon', ikon: 'bi-telephone-fill' },
-    { kode: 'WA', label: 'WhatsApp', ikon: 'bi-whatsapp' },
-    { kode: 'EMAIL', label: 'Email', ikon: 'bi-envelope-fill' },
-    { kode: 'LAYAR', label: 'Langsung', ikon: 'bi-person-badge-fill' },
-];
-
-/** Gaya cadangan bila master belum termuat. */
-const GAYA = {
-    MENUNGGU: { warna: '#94a3b8', ikon: 'bi-hourglass-split', label: 'Menunggu jawaban' },
-    AKAN_HADIR: { warna: '#16a34a', ikon: 'bi-check-circle-fill', label: 'Akan hadir' },
-    JADWAL_LAIN: { warna: '#d97706', ikon: 'bi-arrow-repeat', label: 'Minta jadwal lain' },
-    MUNDUR: { warna: '#dc2626', ikon: 'bi-x-circle-fill', label: 'Menyatakan mundur' },
-    TANPA_JAWABAN: { warna: '#ea580c', ikon: 'bi-exclamation-circle-fill', label: 'Tidak menjawab' },
-    DITUNDA: { warna: '#7c3aed', ikon: 'bi-pause-circle-fill', label: 'Ditunda' },
-};
 
 /**
  * Rona lembut dari warna master ('#16a34a', 0.08 → 'rgba(22, 163, 74, 0.08)')
@@ -45,97 +24,6 @@ export function rona(warna, alfa) {
     return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alfa})`;
 }
 
-export function gayaStatus(kode, dari = null) {
-    const g = GAYA[kode] || { warna: '#94a3b8', ikon: 'bi-circle', label: kode || '—' };
-
-    return {
-        warna: dari?.warna || g.warna,
-        ikon: dari?.ikon || g.ikon,
-        label: dari?.label || dari?.statusLabel || g.label,
-    };
-}
-
-// ── API TIM ─────────────────────────────────────────────────────────────────
-
-export async function muatPerluTindakan(params = {}) {
-    const r = await axios.get(`${API_AGENDA}/perlu-tindakan`, { ...CFG, params });
-
-    return r.data.result;
-}
-
-export async function muatAgenda(params = {}) {
-    const r = await axios.get(`${API_AGENDA}/agenda`, { ...CFG, params });
-
-    return r.data.result;
-}
-
-export async function muatDetail(id) {
-    const r = await axios.get(`${API_KONFIRMASI}/${encodeURIComponent(id)}`, CFG);
-
-    return r.data.result;
-}
-
-let janjiOpsiTunda = null;
-
-/**
- * Master alasan tunda + rentang tanggal — dimuat sekali per halaman (jarang
- * berubah); gagal = dicoba lagi pada pembukaan berikutnya.
- */
-export function muatOpsiTunda() {
-    janjiOpsiTunda ??= axios.get(`${API_KONFIRMASI}/opsi-tunda`, CFG)
-        .then((r) => r.data.result)
-        .catch((e) => {
-            janjiOpsiTunda = null;
-            throw e;
-        });
-
-    return janjiOpsiTunda;
-}
-
-export async function catatJawaban(id, payload) {
-    const r = await axios.post(`${API_KONFIRMASI}/${encodeURIComponent(id)}/catat`, payload, CFG);
-
-    return r.data;
-}
-
-export async function setujuiPermintaan(pid, payload) {
-    const r = await axios.post(`${API_KONFIRMASI}/permintaan/${encodeURIComponent(pid)}/setujui`, payload, CFG);
-
-    return r.data;
-}
-
-export async function tawarkanWaktu(pid, payload) {
-    const r = await axios.post(`${API_KONFIRMASI}/permintaan/${encodeURIComponent(pid)}/tawarkan`, payload, CFG);
-
-    return r.data;
-}
-
-export async function tolakPermintaan(pid, payload) {
-    const r = await axios.post(`${API_KONFIRMASI}/permintaan/${encodeURIComponent(pid)}/tolak`, payload, CFG);
-
-    return r.data;
-}
-
-export async function kirimPengingat(ids) {
-    const r = await axios.post(`${API_KONFIRMASI}/pengingat`, { ids }, CFG);
-
-    return r.data;
-}
-
-/** Tunda: { alasan (kode master TUNDA), perkiraan ('YYYY-MM-DD' | null), pesan }. */
-export async function tundaJadwal(id, isian) {
-    const r = await axios.post(`${API_KONFIRMASI}/${encodeURIComponent(id)}/tunda`, isian, CFG);
-
-    return r.data;
-}
-
-/** Perbarui info penundaan; `kabari` = kirim email kabar terbaru ke kandidat. */
-export async function perbaruiTunda(id, isian, kabari = true) {
-    const r = await axios.post(`${API_KONFIRMASI}/${encodeURIComponent(id)}/tunda/perbarui`, { ...isian, kabari }, CFG);
-
-    return r.data;
-}
-
 // ── API KANDIDAT (tautan bertanda tangan, atau rute portal ber-sesi) ─────────
 
 export async function kirimJawabanKandidat(url, payload) {
@@ -148,12 +36,6 @@ export async function cabutPermintaanKandidat(url) {
     const r = await axios.post(url, {}, CFG);
 
     return r.data;
-}
-
-/** "Halaman benar-benar dibuka" — senyap; kegagalannya tidak mengganggu apa pun. */
-export function tandaiDibuka(url) {
-    if (!url) return;
-    axios.post(url, {}, CFG).catch(() => {});
 }
 
 // ── GALAT ───────────────────────────────────────────────────────────────────
@@ -176,12 +58,6 @@ export function galatDari(e, cadangan = 'Terjadi kesalahan. Coba lagi.') {
     return { status, pesan, result: data.result ?? null };
 }
 
-// ── WAKTU ───────────────────────────────────────────────────────────────────
-
-const HARI = ['Minggu', 'Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
-const BULAN = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
-const dua = (n) => String(n).padStart(2, '0');
-
 /** SQL Server mengirim spasi, bukan 'T' — Safari menolak bentuk itu. */
 export function urai(nilai) {
     if (!nilai) return null;
@@ -189,37 +65,6 @@ export function urai(nilai) {
     const d = new Date(String(nilai).replace(' ', 'T'));
 
     return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/** Date → 'YYYY-MM-DD HH:mm:ss' (waktu LOKAL, tanpa singgah ke UTC). */
-export function keServer(d) {
-    const t = urai(d);
-    if (!t) return null;
-
-    return `${t.getFullYear()}-${dua(t.getMonth() + 1)}-${dua(t.getDate())} ${dua(t.getHours())}:${dua(t.getMinutes())}:00`;
-}
-
-/** 'Kam, 08 Okt · 10.00' */
-export function waktuSingkat(nilai, kosong = '—') {
-    const d = urai(nilai);
-    if (!d) return kosong;
-
-    return `${HARI[d.getDay()].slice(0, 3)}, ${dua(d.getDate())} ${BULAN[d.getMonth()]} · ${dua(d.getHours())}.${dua(d.getMinutes())}`;
-}
-
-/** 'YYYY-MM-DD' → 'Sab, 03 Okt 2026' (tanpa jam). */
-export function tanggalSingkat(nilai, kosong = '—') {
-    const d = urai(String(nilai || '').length === 10 ? `${nilai} 00:00:00` : nilai);
-    if (!d) return kosong;
-
-    return `${HARI[d.getDay()].slice(0, 3)}, ${dua(d.getDate())} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-/** '10.00' */
-export function jam(nilai) {
-    const d = urai(nilai);
-
-    return d ? `${dua(d.getHours())}.${dua(d.getMinutes())}` : '';
 }
 
 /** Selisih bertutur: '3 jam lagi', '2 hari lagi', 'lewat 40 menit'. */
@@ -237,22 +82,3 @@ export function sisaWaktu(nilai, sekarang = new Date()) {
     return menit >= 0 ? `${teks} lagi` : `lewat ${teks}`;
 }
 
-/** '12 menit lalu', '3 jam lalu', '2 hari lalu'. */
-export function sejak(nilai, sekarang = new Date()) {
-    const d = urai(nilai);
-    if (!d) return '';
-    const menit = Math.max(0, Math.round((sekarang.getTime() - d.getTime()) / 60000));
-    if (menit < 1) return 'baru saja';
-    if (menit < 60) return `${menit} menit lalu`;
-    if (menit < 1440) return `${Math.floor(menit / 60)} jam lalu`;
-
-    return `${Math.floor(menit / 1440)} hari lalu`;
-}
-
-/** Ringkasan hasil aksi banyak kandidat: '3 berhasil, 1 dilewati'. */
-export function ringkasBanyak(res) {
-    const ok = (res?.result?.berhasil || []).length;
-    const no = (res?.result?.gagal || []).length;
-
-    return { ok, no, gagal: res?.result?.gagal || [], berhasil: res?.result?.berhasil || [] };
-}

@@ -33,39 +33,15 @@ class AksesService
 
     private const TBL_RKA = 'N_WEB_CAREERS_Role_Konten_Access';
 
-    /** Lingkup penanggung jawab MPP. Nilainya sama dengan CHECK di database. */
-    public const LINGKUP_SENDIRI = 'SENDIRI';
-
-    public const LINGKUP_TIM = 'TIM';
-
-    public const LINGKUP_SEMUA = 'SEMUA';
-
     private const TBL_KL_MENU = 'N_WEB_CAREERS_Klasifikasi_Menu';
 
     private const TBL_KL_AKSI = 'N_WEB_CAREERS_Klasifikasi_Menu_Aksi';
 
     private const TBL_KL_WL = 'N_WEB_CAREERS_Klasifikasi_Whitelist';
 
-    /** Perusahaan yang dilayani modul ini — kunci komposit tabel Karyawan. */
-    private const KODE_PERUSAHAAN = '001';
-
     public static function cacheKey(int $idUsers): string
     {
         return "wc_akses_{$idUsers}";
-    }
-
-    /** Buang cache akses seorang user (dipanggil setiap hak aksesnya diubah). */
-    public static function lupakan(int $idUsers): void
-    {
-        Cache::forget(self::cacheKey($idUsers));
-    }
-
-    /** Buang cache SEMUA user — dipakai saat master menu/aksi berubah. */
-    public static function lupakanSemua(): void
-    {
-        foreach (DB::table(self::TBL_PAGE)->distinct()->pluck('Id_Users') as $id) {
-            Cache::forget(self::cacheKey((int) $id));
-        }
     }
 
     /**
@@ -128,7 +104,7 @@ class AksesService
         } catch (\Throwable $e) {
             // Gagal menyegarkan BUKAN alasan menjatuhkan halaman: salinan sesi
             // yang lama masih sah dipakai sampai permintaan berikutnya.
-            Log::channel('web_career')->warning("Segarkan akses sesi #{$idUsers} gagal: " . $e->getMessage());
+            Log::warning("Segarkan akses sesi #{$idUsers} gagal: " . $e->getMessage());
 
             return null;
         }
@@ -160,9 +136,7 @@ class AksesService
                 // NULL = ikut master, jadi menu yang belum pernah disusun tetap
                 // otomatis mengikuti perubahan Master Menu.
                 'pa.Nama_Header_Custom', 'pa.Sub_Header_Custom', 'pa.Nama_Menu_Custom', 'pa.Icon_Menu_Custom',
-                'pa.Nama_Grup_Custom',
-                // Lingkup penanggung jawab MPP untuk halaman ini.
-                'pa.Lingkup_Pic'
+                'pa.Nama_Grup_Custom'
             )
             ->get();
 
@@ -209,21 +183,10 @@ class AksesService
             }
         }
 
-        // LINGKUP PIC per halaman: 'SENDIRI' | 'TIM' | 'SEMUA'.
-        //
-        // Dibaca dari baris Page_Access yang SAMA dengan yang sudah diambil di
-        // atas, jadi tidak ada kueri tambahan. NULL diperlakukan 'SEMUA' —
-        // lihat catatan panjangnya di lingkupPic().
-        $lingkup = [];
-        foreach ($rows as $r) {
-            $lingkup[$r->Jenis_Page] ??= $r->Lingkup_Pic ?: self::LINGKUP_SEMUA;
-        }
-
         return [
             'permissions' => $permissions,
             'permission_label' => $label,
             'permission_konten' => $konten,
-            'permission_lingkup' => $lingkup,
             'menu' => self::susunMenu($permissions, $label),
         ];
     }
@@ -380,7 +343,7 @@ class AksesService
             }
         } catch (\Throwable $e) {
             // Gagal provisioning tidak boleh mengunci kandidat dari sistem.
-            Log::channel('web_career')->error("Gagal provisioning akses kandidat #{$idUsers}: " . $e->getMessage());
+            Log::error("Gagal provisioning akses kandidat #{$idUsers}: " . $e->getMessage());
         }
     }
 
@@ -401,12 +364,6 @@ class AksesService
         return $peta->get($jenisPage);
     }
 
-    /** Buang cache daftar menu dalam pemeliharaan (dipanggil saat flag diubah). */
-    public static function lupakanMaintenance(): void
-    {
-        Cache::forget('wc_menu_maintenance');
-    }
-
     /** Kategori program yang boleh diakses sebuah klasifikasi akun (whitelist). */
     public static function whitelistKategori(string $kodeKlasifikasi): array
     {
@@ -415,265 +372,5 @@ class AksesService
             ->where('Flag_Diizinkan', 'Y')
             ->pluck('Kategori')
             ->all();
-    }
-
-    // ═══════════════ PEMBACA SESI (dipakai controller & middleware) ═══════════════
-
-    /** Semua aksi yang dimiliki user pada sebuah halaman. */
-    public static function aksi(string $jenisPage): array
-    {
-        return session("career_akses.permissions.{$jenisPage}", []);
-    }
-
-    public static function boleh(string $jenisPage, string $aksi): bool
-    {
-        return in_array(strtoupper($aksi), self::aksi($jenisPage), true);
-    }
-
-    /**
-     * Kategori yang boleh dilihat user pada sebuah halaman. NULL = tak dibatasi
-     * (halaman itu memang tidak peduli kategori).
-     */
-    public static function kategoriDiizinkan(string $jenisPage): ?array
-    {
-        $k = session("career_akses.permission_konten.{$jenisPage}");
-
-        return is_array($k) && $k ? $k : null;
-    }
-
-    /** Terapkan penyaring kategori ke query — dipakai halaman yang peduli kategori. */
-    public static function saringKategori($query, string $jenisPage, string $kolom = 'Kategori')
-    {
-        $izin = self::kategoriDiizinkan($jenisPage);
-
-        return $izin ? $query->whereIn($kolom, $izin) : $query;
-    }
-
-    /**
-     * TAB/CHIP KATEGORI yang boleh dilihat pengguna pada sebuah halaman.
-     *
-     * KENAPA DI SINI, BUKAN DI TIAP CONTROLLER
-     * Pola "ambil master talent → saring pakai kategoriDiizinkan()" sudah tersalin
-     * di beberapa halaman, dan yang belum menyalinnya menampilkan SELURUH kategori
-     * kepada admin yang cuma dijatah satu. Akibatnya admin MT melihat chip
-     * "Rekrutmen", menekannya, lalu mendapat daftar kosong — atau lebih buruk,
-     * mendapat isinya karena daftarnya sendiri juga lupa disaring. Satu salinan
-     * yang benar lebih murah daripada mengejar salinan yang tertinggal.
-     *
-     * @return array<int, array{kode:string, label:string, nama:string}>
-     */
-    public static function tabKategori(string $jenisPage): array
-    {
-        $izin = self::kategoriDiizinkan($jenisPage);   // null = tidak dibatasi
-
-        return DB::table('N_WEB_CAREERS_Master_Talent_Acquisition')
-            ->where('Flag_Aktif', 'Y')
-            ->when($izin, fn ($q) => $q->whereIn('Kode', $izin))
-            ->orderBy('Id_Master_Talent_Acquisition')
-            ->get(['Kode', 'Nama'])
-            ->map(fn ($r) => ['kode' => $r->Kode, 'label' => $r->Nama, 'nama' => $r->Nama])
-            ->all();
-    }
-
-    /**
-     * LINGKUP PENANGGUNG JAWAB MPP pada sebuah halaman.
-     *
-     *   SENDIRI  MPP yang PIC-nya dirinya sendiri
-     *   TIM      PIC-nya satu divisi/sub-divisi dengannya
-     *   SEMUA    seluruhnya
-     *
-     * ── KENAPA TIDAK ADA / NULL BERARTI 'SEMUA' ─────────────────────────────
-     *
-     * Kebalikan dari kebiasaan "bila ragu, tutup" — dan itu disengaja.
-     *
-     * Lingkup ini hanya bisa ditegakkan bila akunnya punya Kode_Karyawan, dan
-     * pengisian kolom itu manual serta menyusul. Kalau tidak-tahu berarti
-     * SENDIRI, maka setiap akun yang belum diisi melihat NOL MPP — modul Program
-     * Kegiatan berhenti bekerja untuk semua orang, karena sebuah kolom belum
-     * sempat diisi. Pengetatan dilakukan sadar, satu akun demi satu.
-     *
-     * Yang menjaga data tetap ada di tempat lain dan tidak melunak: kategori
-     * (Role_Konten_Access) dan aksi (Role_Menu_Access) tetap berlaku penuh.
-     */
-    public static function lingkupPic(string $jenisPage): string
-    {
-        $l = session("career_akses.permission_lingkup.{$jenisPage}");
-
-        return in_array($l, [self::LINGKUP_SENDIRI, self::LINGKUP_TIM, self::LINGKUP_SEMUA], true)
-            ? $l
-            : self::LINGKUP_SEMUA;
-    }
-
-    /** Kode karyawan pengguna yang sedang masuk — null bila akunnya belum ditautkan. */
-    public static function kodeKaryawanSaya(): ?string
-    {
-        $kode = session('career_auth.kode_karyawan');
-
-        return is_string($kode) && $kode !== '' ? $kode : null;
-    }
-
-    /**
-     * Nama karyawan pengguna yang sedang masuk.
-     *
-     * Dipakai layar untuk MENYEBUTKAN siapa penanggung jawab bawaannya, bukan
-     * sekadar mengosongkan kotaknya. "Kosongkan bila Anda sendiri yang
-     * mengerjakan" menuntut orang mempercayai aturan yang tak terlihat; nama
-     * yang tertulis di kotaknya tidak menuntut apa-apa.
-     *
-     * Dibungkus try: tabel Karyawan milik HRIS dan bisa saja belum ada di
-     * basis data pengembangan. Wizard program tidak boleh ikut mati hanya
-     * karena satu nama pelengkap tak terbaca — kode karyawannya sudah cukup
-     * untuk dipakai sebagai nilai.
-     */
-    public static function namaKaryawanSaya(): ?string
-    {
-        $kode = self::kodeKaryawanSaya();
-        if (! $kode) {
-            return null;
-        }
-
-        try {
-            return DB::table('Karyawan')
-                ->where('Kode_Perusahaan', self::KODE_PERUSAHAAN)
-                ->where('Kode_Karyawan', $kode)
-                ->value('Nama');
-        } catch (\Throwable $e) {
-            Log::channel('web_career')->warning('Nama karyawan sesi gagal dibaca: '.$e->getMessage());
-
-            return null;
-        }
-    }
-
-    /**
-     * KODE KARYAWAN YANG BOLEH DIPEGANG PIC-nya, sesuai lingkup halaman ini.
-     *
-     * @return array<int, string>|null  null = tidak dibatasi (lingkup SEMUA)
-     *
-     * Larik KOSONG berbeda artinya dari null, dan bedanya penting: kosong berarti
-     * "dibatasi, dan tidak ada satu pun yang cocok" — pemanggilnya harus
-     * memulangkan nol baris, bukan seluruhnya.
-     */
-    public static function picDiizinkan(string $jenisPage): ?array
-    {
-        $lingkup = self::lingkupPic($jenisPage);
-        if ($lingkup === self::LINGKUP_SEMUA) {
-            return null;
-        }
-
-        $saya = self::kodeKaryawanSaya();
-        if (! $saya) {
-            // Dibatasi tapi tak punya identitas karyawan: tidak ada MPP yang bisa
-            // diakui miliknya. Ini keadaan yang HARUS terlihat kosong, bukan
-            // diam-diam dilonggarkan — kalau tidak, lingkup SENDIRI yang salah
-            // pasang akan terbaca seperti SEMUA dan tak seorang pun menyadarinya.
-            return [];
-        }
-
-        if ($lingkup === self::LINGKUP_SENDIRI) {
-            return [$saya];
-        }
-
-        // TIM — SATU DIVISI/SUB-DIVISI, BUKAN SATU LEVEL JABATAN.
-        //
-        // Karyawan membawa keduanya (ID_Divisi_Sub_Divisi dan ID_Level_Jabatan).
-        // Memakai kesetaraan level akan membuat seorang Staff di Finance
-        // "sejajar" dengan Staff di Produksi dan berhak mengambil MPP-nya. Yang
-        // membentuk tim adalah divisi, bukan pangkat.
-        $divisi = DB::table('Karyawan')
-            ->where('Kode_Perusahaan', self::KODE_PERUSAHAAN)
-            ->where('Kode_Karyawan', $saya)
-            ->value('ID_Divisi_Sub_Divisi');
-
-        if (! $divisi) {
-            return [$saya];
-        }
-
-        return DB::table('Karyawan')
-            ->where('Kode_Perusahaan', self::KODE_PERUSAHAAN)
-            ->where('ID_Divisi_Sub_Divisi', $divisi)
-            ->where('Aktif', 'Y')
-            ->pluck('Kode_Karyawan')
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-    /**
-     * Terapkan penyaring PIC LOKER ke sebuah query.
-     *
-     * Kembaran saringKategori() untuk sumbu yang berbeda. Ditulis sekali karena
-     * pola "ambil picDiizinkan lalu whereIn" sudah muncul di worklist,
-     * penjadwalan, dan hasil tes — dan salinan keempat yang lupa menangani
-     * larik KOSONG (dibatasi, tapi tak ada yang cocok) akan memulangkan SELURUH
-     * baris, bukan nol.
-     */
-    public static function saringPicLoker($query, string $jenisPage, string $kolom)
-    {
-        $boleh = self::picDiizinkan($jenisPage);
-
-        return $boleh === null
-            ? $query
-            : $query->whereIn($kolom, $boleh ?: ['__tidak_ada__']);
-    }
-
-    /**
-     * KATEGORI YANG BOLEH DILIHAT PENGGUNA DI SELURUH HALAMANNYA.
-     *
-     * Dipakai endpoint yang tidak tahu — dan tidak bisa tahu — halaman mana yang
-     * sedang bertanya: /options/{type} melayani puluhan layar sekaligus lewat satu
-     * jalur, jadi ia tak punya `jenisPage` untuk ditanyakan ke kategoriDiizinkan().
-     *
-     * GABUNGAN, bukan irisan. Yang dijaga di sini adalah daftar pilihan sebuah
-     * dropdown, sementara gerbang sesungguhnya tetap ada di halaman masing-masing
-     * (saringan kueri + penolakan saat menyimpan). Memakai irisan akan membuat
-     * pengguna yang dijatah MT pada satu halaman kehilangan pilihan REKRUTMEN pada
-     * halaman lain yang sebenarnya boleh ia kerjakan — menutup pekerjaan yang sah
-     * demi celah yang sudah tertutup di tempat lain.
-     *
-     * Satu halaman TANPA catatan kategori berarti "tidak dibatasi", dan itu
-     * menular ke hasil: pengguna seperti itu memang tidak dibatasi di mana pun.
-     *
-     * @return array<int, string>|null  null = tidak dibatasi
-     */
-    public static function kategoriSemuaHalaman(): ?array
-    {
-        $konten = session('career_akses.permission_konten');
-
-        if (! is_array($konten) || ! $konten) {
-            return null;
-        }
-
-        $gabungan = [];
-        foreach ($konten as $daftar) {
-            if (! is_array($daftar) || ! $daftar) {
-                return null;
-            }
-            foreach ($daftar as $kategori) {
-                $gabungan[$kategori] = true;
-            }
-        }
-
-        return $gabungan ? array_keys($gabungan) : null;
-    }
-
-    /**
-     * Saring pilihan kategori yang DIMINTA agar tak melampaui izin.
-     *
-     * Chip di layar hanya rupa; permintaannya tetap bisa dikarang sendiri
-     * (`?jenis=REKRUTMEN`). Kategori yang tidak diizinkan dikembalikan sebagai
-     * string kosong = "semua yang boleh", bukan ditolak dengan galat: yang
-     * mengetiknya bukan penyerang, umumnya cuma tautan lama atau tab tersimpan.
-     */
-    public static function kategoriDiminta(string $jenisPage, ?string $diminta): string
-    {
-        $diminta = trim((string) $diminta);
-        if ($diminta === '') {
-            return '';
-        }
-
-        $izin = self::kategoriDiizinkan($jenisPage);
-
-        return ($izin === null || in_array($diminta, $izin, true)) ? $diminta : '';
     }
 }

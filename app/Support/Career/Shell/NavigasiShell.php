@@ -12,9 +12,8 @@ use Illuminate\Support\Str;
  *
  * ⛔ JANGAN MENAMBAH MENU DI BERKAS INI.
  *
- * Menu bukan lagi array di kode. Sumbernya tabel N_WEB_CAREERS_Menu, dan cara
- * menambahnya lewat halaman **Master Menu** (/master-menu) → lalu beri aksesnya
- * di **Manajemen Hak Akses** (/hak-akses).
+ * Menu bukan array di kode. Sumbernya tabel N_WEB_CAREERS_Menu — salinan
+ * Master Menu yang diatur di zona dalam dan didorong Sync Worker ke sini.
  *
  * KENAPA: menu yang ditulis di kode dulu jadi titik bentrok nomor satu. Setiap
  * fitur baru menyisipkan satu baris di array yang sama, sehingga dua orang yang
@@ -22,20 +21,13 @@ use Illuminate\Support\Str;
  * kehilangan menunya diam-diam (route & halaman utuh, tapi menu lenyap).
  *
  * Daftar DARURAT di bawah hanya dipakai bila tabel menu belum ada / kosong
- * (mis. basis data baru). Sengaja minimal: cukup untuk masuk dan membuka
- * Master Menu, bukan salinan seluruh menu.
+ * (mis. salinan belum pernah didorong). Sengaja minimal.
  */
 class NavigasiShell
 {
     private const TABEL = 'N_WEB_CAREERS_Menu';
 
-    /**
-     * Menu sesuai peran.
-     *
-     * Kandidat TIDAK boleh melihat menu admin sama sekali — bukan sekadar
-     * ditolak saat diklik. Menu yang terlihat tapi selalu ditolak justru
-     * membocorkan struktur sistem dan bikin bingung.
-     */
+    /** Menu portal kandidat yang sedang masuk. */
     public static function untukPenggunaSaatIni(): array
     {
         // SUMBER UTAMA: paket hak akses (dibangun dari master menu +
@@ -76,18 +68,7 @@ class NavigasiShell
 
         // Cadangan: sesi lama / paket akses belum terbentuk → daftar dari master,
         // supaya panel tidak pernah tampil tanpa menu sama sekali.
-        return IdentitasShell::adalahAdmin() ? self::admin() : self::kandidat();
-    }
-
-    /** Menu admin — dari tabel master; daftar darurat bila master kosong. */
-    public static function admin(): array
-    {
-        return self::dariMaster('ADMIN') ?: [
-            ['id' => 'hak-akses', 'title' => 'Hak Akses', 'items' => [
-                ['key' => 'masterMenuPage', 'label' => 'Master Menu', 'icon' => 'bi bi-list-nested', 'url' => '/master-menu'],
-                ['key' => 'hakAksesPage', 'label' => 'Manajemen Hak Akses', 'icon' => 'bi bi-person-lock', 'url' => '/hak-akses'],
-            ]],
-        ];
+        return self::kandidat();
     }
 
     /** Menu portal kandidat — dari tabel master; daftar darurat bila master kosong. */
@@ -165,13 +146,5 @@ class NavigasiShell
                 'subs' => $subs,
             ];
         }, array_keys($grup), $grup);
-    }
-
-    /** Buang cache menu master — dipanggil setiap Master Menu berubah. */
-    public static function lupakan(): void
-    {
-        foreach (['ADMIN', 'KANDIDAT'] as $r) {
-            Cache::forget("wc_nav_master_{$r}");
-        }
     }
 }

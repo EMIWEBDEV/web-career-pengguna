@@ -136,7 +136,7 @@ class PendidikanController extends Controller
 
             return ResponseHelper::success($rows, 'Fakultas dimuat');
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::channel('web_career')->error('Gagal memuat fakultas: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Gagal memuat fakultas: ' . $e->getMessage());
 
             return ResponseHelper::error('Gagal memuat fakultas', 500);
         }
@@ -159,7 +159,7 @@ class PendidikanController extends Controller
 
             return ResponseHelper::success($hasil, 'Prodi dimuat');
         } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::channel('web_career')->error('Gagal memuat prodi: ' . $e->getMessage());
+            \Illuminate\Support\Facades\Log::error('Gagal memuat prodi: ' . $e->getMessage());
 
             return ResponseHelper::error('Gagal memuat prodi', 500);
         }

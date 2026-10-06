@@ -3,26 +3,15 @@
 namespace App\Support\Career\Shell;
 
 /**
- * WEB CAREERS — SIAPA yang sedang membuka shell.
+ * WEB CAREERS — SIAPA yang sedang membuka shell portal.
  *
- * Dipisah dari CareerShell supaya urusan peran/identitas punya berkasnya
- * sendiri: kalau aturan peran berubah, yang tersentuh hanya berkas ini.
+ * Project pengguna hanya mengenal akun KANDIDAT: tabel akun publik tidak
+ * pernah berisi akun admin (panel admin hidup di zona dalam).
  */
 class IdentitasShell
 {
-    /** Peran yang boleh membuka panel admin. */
-    public const PERAN_ADMIN = ['ADMIN', 'SUPERADMIN'];
-
-    /**
-     * Nama peran yang dibaca manusia — dipakai footer sidebar & kartu topbar.
-     *
-     * Ditaruh di sini, bukan di masing-masing layar, karena label yang sama
-     * dipakai tiga tempat; menulisnya ulang per layar membuat satu tempat
-     * ketinggalan setiap kali ada peran baru.
-     */
+    /** Nama peran yang dibaca manusia — footer sidebar & kartu topbar. */
     public const LABEL_PERAN = [
-        'SUPERADMIN' => 'Superadmin',
-        'ADMIN' => 'Administrator',
         'KANDIDAT' => 'Kandidat',
     ];
 
@@ -30,11 +19,6 @@ class IdentitasShell
     public static function peran(): string
     {
         return session('career_auth.role') ?: 'KANDIDAT';
-    }
-
-    public static function adalahAdmin(): bool
-    {
-        return in_array(self::peran(), self::PERAN_ADMIN, true);
     }
 
     /** Label peran; peran tak dikenal dipulangkan apa adanya, bukan ditebak. */
@@ -45,21 +29,13 @@ class IdentitasShell
         return self::LABEL_PERAN[$peran] ?? ucfirst(strtolower(str_replace('_', ' ', $peran)));
     }
 
-    /** Beranda sesuai peran: admin ke panel, kandidat ke portalnya sendiri. */
+    /** Beranda: portal kandidat bila sudah masuk, halaman utama bila belum. */
     public static function beranda(): string
     {
-        return self::adalahAdmin() ? '/karir' : '/kandidat/portal';
+        return session('career_auth.id') ? '/kandidat/portal' : '/';
     }
 
-    /**
-     * Identitas pengguna dari sesi login (career_auth).
-     *
-     * CATATAN PERBAIKAN: versi lama memakai 'ADMIN' sebagai peran cadangan dan
-     * memberi label 'Administrator' kepada SIAPA PUN yang bukan SUPERADMIN —
-     * termasuk kandidat. Akibatnya footer sidebar portal kandidat menuliskan
-     * "Administrator" di bawah nama pelamar. Cadangannya sekarang disamakan
-     * dengan peran(): 'KANDIDAT', yaitu peran dengan wewenang paling kecil.
-     */
+    /** Identitas pengguna dari sesi login (career_auth). */
     public static function pengguna(): array
     {
         $auth = session('career_auth');
@@ -71,10 +47,8 @@ class IdentitasShell
             'username' => $auth['email'] ?? '-',
             'email' => $auth['email'] ?? null,
             'role' => $role,
-            // Dipakai badge topbar. Bukan nomor KTP — namanya warisan kontrak
-            // shell bersama; yang ditampilkan memang kode peran.
+            // Dipakai badge topbar (kontrak shell bersama) — isinya kode peran.
             'nik' => $role,
-            'kode_karyawan' => $auth['kode_karyawan'] ?? '-',
             'department' => self::labelPeran($role),
         ];
     }

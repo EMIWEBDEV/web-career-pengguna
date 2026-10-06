@@ -92,12 +92,6 @@ class PencarianCepat
         });
     }
 
-    public static function lupakan(string $tabel, string $kolom): void
-    {
-        Cache::forget("wc_ft_{$tabel}_{$kolom}");
-        Cache::forget("wc_pk_{$tabel}");
-    }
-
     /**
      * Pecah ketikan pengguna jadi kata yang aman.
      * Hanya huruf/angka yang dipertahankan — mencegah sintaks CONTAINSTABLE

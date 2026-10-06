@@ -1,78 +1,63 @@
-table_query.sql
-.gitignore
-.dockerignore
-# Dependencies (install inside container)
+# .dockerignore TIDAK mengenal komentar di ujung baris — seluruh baris dibaca
+# sebagai pola. Tulis komentar di barisnya sendiri.
+
+# Dependencies (dipasang di dalam container)
 /node_modules
 /vendor
 
-# Build artifacts and local server files
+# Hasil build & berkas server lokal
 /public/build
 /public/hot
-
-# Storage symlink
 /public/storage
 
-# Ignore local application storage contents
+# Isi storage lokal — termasuk storage/app/gcs yang berisi KUNCI AKUN LAYANAN.
+# Di Cloud Run aplikasi memakai akun layanan service-nya, bukan berkas kunci.
+/storage/app/*
+!/storage/app/.gitignore
+!/storage/app/public
+/storage/app/public/*
+!/storage/app/public/.gitignore
 /storage/framework/cache/data/*
 /storage/framework/sessions/*
+/storage/framework/testing/*
 /storage/framework/views/*
-/storage/logs/*.log
+/storage/logs/*
 /storage/*.key
-!/storage/.gitignore
 
-# .dockerignore TIDAK mengenal komentar di ujung baris — seluruh baris dibaca
-# sebagai pola. Baris ini dulu berbunyi:
-#     /bootstrap/cache/*.php  # <-- TAMBAHKAN BARIS INI
-# sehingga yang dicari Docker adalah berkas bernama persis begitu, dan cache
-# konfigurasi dari mesin lokal tetap bisa ikut terbawa ke dalam image — berikut
-# kredensial basis data lokal yang sempat ter-cache di dalamnya.
+# Cache konfigurasi dari mesin lokal bisa membawa kredensial basis data lokal.
 /bootstrap/cache/*.php
 
-# Deployment and Docker specific
-/deploy/docker-compose.yml
-/deploy/Dockerfile
-.dockerignore
-
-# Environment files (HIGHLY IMPORTANT)
+# Berkas lingkungan (SANGAT PENTING). .env.example JANGAN di-ignore — dipakai saat build.
 .env
-# .env.example JANGAN di-ignore agar bisa dipakai saat build
+.env.*
+!.env.example
+*[Ee][Nn][Vv]*.txt
+auth.json
+*.p12
+*.pem
 
-# Local development config
-Homestead.json
-Homestead.yaml
-
-# Caching and log files
+# Pengujian & alat pengembangan — tidak dibutuhkan image produksi
+/tests
+phpunit.xml
 .phpunit.cache
 .phpunit.result.cache
 npm-debug.log
 yarn-error.log
+docker-compose.yml
 
-# Credentials
-auth.json
-
-# IDE and OS specific
+# Dokumen, arsip, IDE, git
+/docs
+*.zip
+*.7z
+*.rar
+/*.sql
+/.claude
+CLAUDE.md
 /.fleet
 /.idea
 /.vscode
 .DS_Store
-
-# Git
 .git
 .gitignore
-
-table_query.sql
-.gitignore
+.gitattributes
 .dockerignore
-.claude/settings.local.json
-.claude
-.CLAUDE.md
-akses structure.sql
-hcis-kpi-groupedV1.1.1.zip
-table_structure_2.sql
-table_structure.sql
-.dockerignore
-.gitignore
-docs/
-.claude
-.CHANGESQLENV
-.CHANGEZIP

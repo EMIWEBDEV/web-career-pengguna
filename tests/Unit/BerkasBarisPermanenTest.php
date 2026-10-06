@@ -97,7 +97,7 @@ class BerkasBarisPermanenTest extends TestCase
     {
         $this->draf($this->tigaSertifikat(), $this->jawabanTigaBaris());
 
-        $jumlah = FormulirDrafController::jadikanPermanen(1, 9, 77, $this->jawabanTigaBaris());
+        $jumlah = count(FormulirDrafController::jadikanPermanen(1, 9, 77, $this->jawabanTigaBaris()));
 
         $this->assertSame(3, $jumlah);
 
@@ -155,7 +155,7 @@ class BerkasBarisPermanenTest extends TestCase
 
         $this->draf($this->tigaSertifikat(), $jawabanDuaBaris);
 
-        $jumlah = FormulirDrafController::jadikanPermanen(1, 9, 77, $jawabanDuaBaris);
+        $jumlah = count(FormulirDrafController::jadikanPermanen(1, 9, 77, $jawabanDuaBaris));
 
         $this->assertSame(2, $jumlah);
         $this->assertSame(

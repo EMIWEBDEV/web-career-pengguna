@@ -5,7 +5,6 @@
          awal supaya <title> jadi tag judul pertama di dokumen. --}}
     @include('components.header')
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     @vite('resources/js/app.js')
     @inertiaHead
 

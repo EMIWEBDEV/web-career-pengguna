@@ -5,7 +5,7 @@ namespace App\Support\Career;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
-/** Memastikan pembukaan, program, dan posisi adalah satu target lamaran valid. */
+/** Memastikan pembukaan, program, dan posisi (salinan master) adalah satu target lamaran valid. */
 class LamaranTargetValidator
 {
     /**
@@ -60,21 +60,9 @@ class LamaranTargetValidator
             return ['ok' => false, 'pesan' => 'Lowongan ini sedang tidak dibuka.'];
         }
 
-        // ── RENCANA MPP SUDAH TERPENUHI ─────────────────────────────────────
-        //
-        // Status loker (BUKA/PENUH) hanya tahu jatah PROGRAM INI. Satu MPP yang
-        // dibuka di dua program punya dua baris loker yang tidak saling kenal:
-        // yang satu bisa masih 'BUKA' padahal seluruh kursi yang disetujui sudah
-        // terisi lewat program sebelah.
-        //
-        // Menahan di sini, bukan cuma di gerbang keputusan, karena membiarkan
-        // orang menyelesaikan seluruh proses seleksi untuk kursi yang sudah
-        // tidak ada adalah hal yang paling mahal yang bisa dilakukan sistem ini
-        // kepada seorang pelamar.
-        $mpp = KursiMpp::keadaan($posisi->Mpp_Ref ?? null);
-        if ($mpp && $mpp['penuh']) {
-            return ['ok' => false, 'pesan' => 'Lowongan ini sudah terpenuhi — seluruh kursinya telah terisi.'];
-        }
+        // Kursi MPP yang sudah terisi lintas program dinilai ZONA DALAM saat
+        // memproses lamaran (ia yang memegang hitungan kursinya); posisi yang
+        // penuh ditutupnya dan statusnya sampai ke sini lewat salinan loker.
 
         return [
             'ok' => true,

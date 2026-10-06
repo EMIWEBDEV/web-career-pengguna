@@ -23,11 +23,6 @@ class BerkasBarisSinkronTest extends TestCase
         $this->assertSame(BerkasBaris::FORMAT_KUNCI, $this->konstantaJs('FORMAT_KUNCI'));
     }
 
-    public function test_format_label_sama_dengan_js(): void
-    {
-        $this->assertSame(BerkasBaris::FORMAT_LABEL, $this->konstantaJs('FORMAT_LABEL'));
-    }
-
     /**
      * kunciBagian() PHP harus mengikuti kunciBagian() di aturan.js.
      *

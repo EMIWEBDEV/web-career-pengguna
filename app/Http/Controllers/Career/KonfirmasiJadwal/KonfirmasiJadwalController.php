@@ -3,40 +3,44 @@
 namespace App\Http\Controllers\Career\KonfirmasiJadwal;
 
 use App\Helpers\ResponseHelper;
-use App\Http\Controllers\Career\Lamaran\LamaranController;
 use App\Http\Controllers\Controller;
-use App\Support\Career\JejakJadwal;
-use App\Support\Career\KonfirmasiJadwal;
-use App\Support\Career\UndanganJadwal;
+use App\Support\Career\Kalimat;
+use App\Support\Portal\PenilaiWaktu;
+use App\Support\Portal\Potret;
+use App\Support\Sinkron\Outbox;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Vinkla\Hashids\Facades\Hashids;
 
 /**
- * WEB CAREERS — KONFIRMASI KEHADIRAN dari sisi kandidat.
+ * WEB CAREERS — KONFIRMASI KEHADIRAN dari sisi kandidat (zona luar).
  *
  * DUA PINTU, SATU ATURAN:
- *   - Halaman TANPA login, dibuka dari tombol "Konfirmasi Kehadiran" di surel.
- *     Tautannya bertanda tangan (HMAC APP_KEY), berumur, dan TERIKAT VERSI
- *     jadwal: tautan dari surel lama tidak bisa mengonfirmasi jam yang sudah
- *     diganti. Tanda tangan GET diperiksa di sini (bukan middleware `signed`)
- *     supaya tautan rusak / kedaluwarsa dijawab halaman yang ramah, bukan 403.
- *   - PORTAL KANDIDAT (sudah login): dijawab langsung di kartu jadwal tanpa
- *     pindah halaman (permintaan user 1 Okt 2026 — "jangan banyak klik dan
- *     redirect"). Pintunya memeriksa sesi + kepemilikan, bukan tanda tangan.
+ *   - Halaman TANPA login dari tombol di surel undangan. Tautannya bertanda
+ *     tangan (kunci TAUTAN_KUNCI, dibuat zona dalam), berumur, terikat VERSI
+ *     jadwal, dan membawa kode lamaran (`l`) yang ikut ditandatangani.
+ *   - PORTAL KANDIDAT (sudah login): dijawab langsung di kartu jadwal;
+ *     kepemilikan dibuktikan potret akun yang masuk.
  *
- * Seluruh aturan (batas, jatah, komitmen, final, versi) ada di
- * KonfirmasiJadwal — kelas ini hanya menerjemahkan HTTP.
+ * Isi halaman & aturan jawabnya datang dari POTRET (konfirmasi.{id}). Yang
+ * diperiksa di sini adalah yang bisa dinilai kandidat saat itu juga — versi,
+ * batas, pilihan, alasan, kalimat penjelasan, usulan — supaya umpan baliknya
+ * instan. Jawabannya dicatat sebagai peristiwa Konfirmasi.Dijawab / Dicabut;
+ * zona dalam yang memutuskan dan memperbarui potret.
  */
 class KonfirmasiJadwalController extends Controller
 {
     private const HALAMAN = 'Career/portal/KonfirmasiJadwal';
 
-    /** GET /karir/konfirmasi/{id}/{versi} */
+    /** Kode jawaban yang dianggap "sudah menyatakan" — mengubahnya tunduk aturan ubah. */
+    private const SUDAH_MENYATAKAN = ['AKAN_HADIR', 'JADWAL_LAIN'];
+
+    /** GET /karir/konfirmasi/{id}/{versi}?l={kode lamaran} */
     public function halaman(Request $request, string $id, string $versi)
     {
         if (! URL::hasCorrectSignature($request)) {
@@ -46,61 +50,102 @@ class KonfirmasiJadwalController extends Controller
             return $this->tampil(['keadaan' => 'TAUTAN_KEDALUWARSA']);
         }
 
-        $realId = Hashids::decode($id)[0] ?? null;
-        $sub = $realId && KonfirmasiJadwal::siap() ? KonfirmasiJadwal::konteks((int) $realId) : null;
-        if (! $sub) {
+        $sasaran = $this->lewatTautan($request, $id);
+        if (! $sasaran) {
             return $this->tampil(['keadaan' => 'TAUTAN_RUSAK']);
         }
 
-        return $this->tampil($this->muatan($sub, (int) $versi));
+        return $this->tampil($this->muatan($sasaran, (int) $versi));
     }
 
-    /** POST /karir/konfirmasi/{id}/{versi}/jawab */
+    /** POST /karir/konfirmasi/{id}/{versi}/jawab (bertanda tangan) */
     public function jawab(Request $request, string $id, string $versi)
     {
-        [$realId, $sub] = $this->sasaran($id);
-        if (! $sub) {
-            return ResponseHelper::error('Jadwal tidak ditemukan.', 404);
-        }
+        $sasaran = $this->lewatTautan($request, $id);
 
-        return $this->jawabUntuk($request, (int) $realId, (int) $versi, $sub);
+        return $sasaran
+            ? $this->jawabUntuk($request, $sasaran, (int) $versi, 'TAUTAN')
+            : ResponseHelper::error('Jadwal tidak ditemukan.', 404);
     }
 
     /** POST /karir/konfirmasi/{id}/{versi}/cabut — batalkan permintaan jadwal lain. */
     public function cabut(Request $request, string $id, string $versi)
     {
-        [$realId, $sub] = $this->sasaran($id);
-        if (! $sub) {
-            return ResponseHelper::error('Jadwal tidak ditemukan.', 404);
-        }
+        $sasaran = $this->lewatTautan($request, $id);
 
-        return self::balas(KonfirmasiJadwal::cabutPermintaan((int) $realId, (int) $versi, $this->pelaku($request, $sub)));
+        return $sasaran
+            ? $this->cabutUntuk($request, $sasaran, (int) $versi, 'TAUTAN')
+            : ResponseHelper::error('Jadwal tidak ditemukan.', 404);
     }
 
     /** POST /kandidat/konfirmasi/{id}/{versi}/jawab — dari kartu jadwal portal. */
     public function jawabPortal(Request $request, string $id, string $versi)
     {
-        [$realId, $sub] = $this->milikSendiri($id);
-        if (! $sub) {
-            return ResponseHelper::error('Jadwal tidak ditemukan.', 404);
-        }
+        $sasaran = $this->milikSendiri($id);
 
-        return $this->jawabUntuk($request, (int) $realId, (int) $versi, $sub);
+        return $sasaran
+            ? $this->jawabUntuk($request, $sasaran, (int) $versi, 'PORTAL')
+            : ResponseHelper::error('Jadwal tidak ditemukan.', 404);
     }
 
     /** POST /kandidat/konfirmasi/{id}/{versi}/cabut — dari kartu jadwal portal. */
     public function cabutPortal(Request $request, string $id, string $versi)
     {
-        [$realId, $sub] = $this->milikSendiri($id);
-        if (! $sub) {
-            return ResponseHelper::error('Jadwal tidak ditemukan.', 404);
-        }
+        $sasaran = $this->milikSendiri($id);
 
-        return self::balas(KonfirmasiJadwal::cabutPermintaan((int) $realId, (int) $versi, $this->pelaku($request, $sub)));
+        return $sasaran
+            ? $this->cabutUntuk($request, $sasaran, (int) $versi, 'PORTAL')
+            : ResponseHelper::error('Jadwal tidak ditemukan.', 404);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+
+    /**
+     * Sasaran lewat tautan surel: kode lamaran dari query yang IKUT
+     * DITANDATANGANI, jadi tidak bisa ditukar ke lamaran orang lain.
+     *
+     * @return array{id: int, kode: string, idUsers: int, konf: array, potret: array}|null
+     */
+    private function lewatTautan(Request $request, string $id): ?array
+    {
+        $realId = Hashids::decode($id)[0] ?? null;
+        $kode = (string) $request->query('l', '');
+        $potret = $realId && $kode !== '' ? Potret::lewatTautan($kode) : null;
+        $konf = $potret['konfirmasi'][(string) $realId] ?? null;
+
+        return is_array($konf) ? [
+            'id' => (int) $realId,
+            'kode' => $kode,
+            'idUsers' => (int) $potret['_idUsers'],
+            'konf' => $konf,
+            'potret' => $potret,
+        ] : null;
+    }
+
+    /** Sasaran pintu PORTAL: hanya jadwal yang tercantum di potret akun yang masuk. */
+    private function milikSendiri(string $id): ?array
+    {
+        $userId = (int) session('career_auth.id');
+        $realId = Hashids::decode($id)[0] ?? null;
+        $temu = $realId && $userId ? Potret::cari($userId, 'konfirmasi', (int) $realId) : null;
+
+        return $temu ? [
+            'id' => (int) $realId,
+            'kode' => $temu['kode'],
+            'idUsers' => $userId,
+            'konf' => $temu['isi'],
+            'potret' => $temu['potret'],
+        ] : null;
+    }
+
+    /** Blok jawab yang sudah disegarkan waktunya (batas, H-n, usulan). */
+    private static function blok(array $konf): array
+    {
+        return PenilaiWaktu::segarkan((array) ($konf['halaman'] ?? []));
     }
 
     /** Satu jalur jawab untuk kedua pintu. */
-    private function jawabUntuk(Request $request, int $realId, int $versi, object $sub)
+    private function jawabUntuk(Request $request, array $s, int $versi, string $kanal)
     {
         $data = $request->validate([
             'kode' => 'required|string|max:20',
@@ -110,117 +155,208 @@ class KonfirmasiJadwalController extends Controller
             'usulan.*.tanggal' => 'required_with:usulan|date_format:Y-m-d',
             'usulan.*.bagian' => 'required_with:usulan|string|max:10',
             'statusDilihat' => 'nullable|string|max:20',
-            // Centang "saya mengerti lamaran saya akan ditutup" — WAJIB ikut
-            // terkirim saat tidak melanjutkan; diperiksa KonfirmasiJadwal::jawab.
+            // Centang "saya mengerti lamaran saya akan ditutup" — WAJIB saat
+            // tidak melanjutkan.
             'paham' => 'nullable|boolean',
         ]);
 
-        return self::balas(KonfirmasiJadwal::jawab($realId, $versi, $data['kode'], [
-            'alasan' => $data['alasan'] ?? null,
-            'catatan' => $data['catatan'] ?? null,
-            'usulan' => $data['usulan'] ?? [],
-            'statusDilihat' => $data['statusDilihat'] ?? null,
+        $konf = $s['konf'];
+        $h = self::blok($konf);
+        $status = (string) ($h['konfirmasi']['status'] ?? '');
+
+        if ((int) ($konf['versi'] ?? 0) !== $versi) {
+            return self::tolak(409, 'Jadwalnya sudah diperbarui. Buka undangan terbaru, lalu jawab di sana.', $status, true);
+        }
+        if (! empty($h['konfirmasi']['final'])) {
+            return self::tolak(409, 'Pernyataanmu sudah kami terima dan tidak bisa diubah lewat halaman ini.', $status);
+        }
+        if (empty($h['konfirmasi']['bolehJawab'])) {
+            return self::tolak(422, 'Batas konfirmasi sudah lewat. Hubungi tim rekrutmen bila berhalangan.', $status);
+        }
+        // Tampilan yang dilihat sudah basi (tab lain / tim lebih dulu).
+        if (! empty($data['statusDilihat']) && $data['statusDilihat'] !== $status) {
+            return self::tolak(409, 'Status konfirmasi baru saja berubah. Periksa keadaan terbaru, lalu jawab lagi bila perlu.', $status, true);
+        }
+
+        $pilihan = collect($h['pilihan'] ?? [])->firstWhere('kode', $data['kode']);
+        if (! $pilihan) {
+            return self::tolak(422, 'Pilihan jawaban tidak dikenali.', $status);
+        }
+        $bukaPermintaan = (bool) ($pilihan['bukaPermintaan'] ?? false);
+        $mundur = (bool) ($pilihan['sinyalMundur'] ?? false);
+
+        if ($data['kode'] === $status && ! $bukaPermintaan) {
+            return ResponseHelper::success(['status' => $status], 'Jawabanmu sudah tercatat.');
+        }
+        if ($data['kode'] === $status && $bukaPermintaan) {
+            return self::tolak(409, 'Permintaan jadwal lain sudah ada dan sedang ditinjau tim.', $status);
+        }
+
+        // KOMITMEN: jawaban yang sudah ada hanya boleh diubah sesuai aturan
+        // tipenya. "Tidak melanjutkan" tetap bebas.
+        if (in_array($status, self::SUDAH_MENYATAKAN, true) && ! $mundur && ! empty($h['ubah']['terkunci'])) {
+            return self::tolak(422, (string) (($h['ubah']['pesanKunci'] ?? null) ?: 'Jawabanmu sudah tidak bisa diubah.'), $status, true);
+        }
+
+        if ($bukaPermintaan && ($galat = self::periksaPermintaan($h, $data))) {
+            return self::tolak(422, $galat, $status);
+        }
+        if ($mundur && ($galat = self::periksaMundur($h, $data, $request->boolean('paham')))) {
+            return self::tolak(422, $galat, $status);
+        }
+
+        $isian = [
+            'kode' => $data['kode'],
+            'alasan' => ($data['alasan'] ?? null) ?: null,
+            'catatan' => self::rapikan($data['catatan'] ?? null),
+            'usulan' => array_values($data['usulan'] ?? []),
             'paham' => $request->boolean('paham'),
-        ], $this->pelaku($request, $sub)));
+        ];
+
+        // Jawaban yang SAMA persis (klik dua kali) = satu peristiwa.
+        $sidik = substr(hash('sha256', json_encode($isian, JSON_UNESCAPED_UNICODE)), 0, 16);
+        DB::transaction(fn () => Outbox::tulis(
+            Outbox::KONFIRMASI_DIJAWAB,
+            "Konfirmasi.Dijawab:{$s['id']}:{$versi}:{$s['idUsers']}:{$sidik}",
+            $s['idUsers'],
+            [
+                'kode' => $s['kode'],
+                'akun' => ['id_publik' => $s['idUsers']],
+                'aktivitas_id' => $s['id'],
+                'versi' => $versi,
+                'status_dilihat' => $status,
+                'jawaban' => $isian,
+                'pelaku' => $this->pelaku($request, $kanal),
+            ],
+            $kanal,
+        ));
+
+        Log::info("[KONFIRMASI] aktivitas #{$s['id']} v{$versi} dijawab {$data['kode']} lewat {$kanal}.");
+
+        $pesan = match (true) {
+            $mundur => 'Terima kasih sudah memberi tahu. Pernyataanmu kami teruskan ke tim rekrutmen.',
+            $bukaPermintaan => 'Permintaan jadwal lain sudah kami terima. Tim rekrutmen akan meninjau usulanmu.',
+            default => 'Terima kasih! Jawabanmu sudah kami terima.',
+        };
+
+        return ResponseHelper::success(['status' => $data['kode']], $pesan);
     }
 
-    /** Hasil layanan → JSON. `terkunci` memberi tahu layar untuk memuat ulang aturannya. */
-    private static function balas(array $hasil)
+    /** Batalkan permintaan jadwal lain. */
+    private function cabutUntuk(Request $request, array $s, int $versi, string $kanal)
     {
-        return $hasil['ok']
-            ? ResponseHelper::success(['status' => $hasil['status'] ?? null], $hasil['pesan'])
-            : response()->json([
-                'success' => false,
-                'status' => $hasil['kode'],
-                'message' => $hasil['pesan'],
-                'result' => ['status' => $hasil['status'] ?? null, 'terkunci' => (bool) ($hasil['terkunci'] ?? false)],
-            ], $hasil['kode']);
-    }
+        $konf = $s['konf'];
+        $h = self::blok($konf);
+        $status = (string) ($h['konfirmasi']['status'] ?? '');
 
-    /**
-     * POST /karir/konfirmasi/{id}/{versi}/dibuka — halaman benar-benar dibuka
-     * di peramban. Dikirim JavaScript halaman, BUKAN dicatat saat GET: pemindai
-     * tautan surel (Safe Links, pratinjau Gmail) membuka GET secara otomatis
-     * dan akan mengarang "sudah dibuka" untuk surel yang belum dibaca siapa pun.
-     * Sekali per versi.
-     */
-    public function dibuka(Request $request, string $id, string $versi)
-    {
-        [$realId, $sub] = $this->sasaran($id);
-        if (! $sub || (int) ($sub->Jadwal_Versi ?? 0) !== (int) $versi) {
-            return ResponseHelper::success(null, 'Diabaikan.');
+        if ((int) ($konf['versi'] ?? 0) !== $versi) {
+            return self::tolak(409, 'Jadwalnya sudah diperbarui. Muat ulang halaman.', $status, true);
+        }
+        if (($h['permintaan']['status'] ?? null) !== 'TERBUKA' && $status !== 'JADWAL_LAIN') {
+            return self::tolak(409, 'Tidak ada permintaan jadwal lain yang bisa dibatalkan.', $status);
         }
 
-        $sudah = DB::table(JejakJadwal::TABEL)
-            ->where('Lamaran_Tahap_Tes_Id', $realId)
-            ->where('Versi', (int) $versi)
-            ->where('Aksi', KonfirmasiJadwal::A_DIBUKA)
-            ->exists();
+        DB::transaction(fn () => Outbox::tulis(
+            Outbox::KONFIRMASI_DICABUT,
+            'Konfirmasi.Dicabut:'.Str::uuid(),
+            $s['idUsers'],
+            [
+                'kode' => $s['kode'],
+                'akun' => ['id_publik' => $s['idUsers']],
+                'aktivitas_id' => $s['id'],
+                'versi' => $versi,
+                'pelaku' => $this->pelaku($request, $kanal),
+            ],
+            $kanal,
+        ));
 
-        if (! $sudah) {
-            KonfirmasiJadwal::tulisJejak((int) $realId, (int) $versi, KonfirmasiJadwal::A_DIBUKA, $this->pelaku($request, $sub));
+        return ResponseHelper::success(['status' => null], 'Permintaan jadwal lain dibatalkan.');
+    }
+
+    /** Minta jadwal lain: alasan dari master + usulan dalam rentang & jumlah yang diizinkan. */
+    private static function periksaPermintaan(array $h, array $data): ?string
+    {
+        $alasan = collect($h['alasan']['JADWAL_LAIN'] ?? [])->firstWhere('kode', (string) ($data['alasan'] ?? ''));
+        if (! $alasan) {
+            return 'Pilih alasan kenapa waktu ini tidak bisa.';
+        }
+        if (! empty($alasan['butuhCatatan']) && self::rapikan($data['catatan'] ?? null) === null) {
+            return 'Ceritakan sedikit kenapa waktu ini tidak bisa.';
+        }
+        if ((int) ($h['jatah']['sisa'] ?? 1) < 1) {
+            return 'Kesempatan meminta jadwal lain untuk aktivitas ini sudah habis. Hubungi tim rekrutmen.';
         }
 
-        return ResponseHelper::success(null, 'Tercatat.');
+        $aturan = (array) ($h['aturanUsulan'] ?? []);
+        $usulan = array_values($data['usulan'] ?? []);
+        if (! $usulan) {
+            return 'Usulkan setidaknya satu waktu pengganti.';
+        }
+        if (count($usulan) > (int) ($aturan['maks'] ?? 3)) {
+            return 'Usulan waktu paling banyak '.(int) ($aturan['maks'] ?? 3).'.';
+        }
+        $bagian = array_column((array) ($aturan['bagian'] ?? []), 'kode');
+        foreach ($usulan as $u) {
+            if (($aturan['tanggalMin'] ?? '') !== '' && $u['tanggal'] < $aturan['tanggalMin']) {
+                return 'Usulan waktu paling cepat besok.';
+            }
+            if (($aturan['tanggalMaks'] ?? '') !== '' && $u['tanggal'] > $aturan['tanggalMaks']) {
+                return 'Usulan waktu terlalu jauh — paling lambat '.Carbon::parse($aturan['tanggalMaks'])->translatedFormat('d M Y').'.';
+            }
+            if ($bagian && ! in_array($u['bagian'], $bagian, true)) {
+                return 'Pilihan waktu dalam sehari tidak dikenali.';
+            }
+        }
+
+        return null;
     }
 
-    // ════════════════════════════════════════════════════════════════════════
-
-    /** Render halaman + kepala keamanan (tanpa indeks, tanpa rujukan, tanpa bingkai). */
-    private function tampil(array $props)
+    /** Tidak melanjutkan: alasan wajib, penjelasan berupa kalimat sungguhan, centang "paham". */
+    private static function periksaMundur(array $h, array $data, bool $paham): ?string
     {
-        return Inertia::render(self::HALAMAN, $props)
-            ->toResponse(request())
-            ->withHeaders([
-                'X-Robots-Tag' => 'noindex, nofollow',
-                'Referrer-Policy' => 'no-referrer',
-                'Cache-Control' => 'no-store, private',
-                'Content-Security-Policy' => "frame-ancestors 'none'",
-            ]);
+        $alasan = collect($h['alasan']['MUNDUR'] ?? [])->firstWhere('kode', (string) ($data['alasan'] ?? ''));
+        if (! $alasan) {
+            return 'Pilih alasan kenapa kamu tidak melanjutkan seleksi.';
+        }
+        if (! empty($alasan['butuhCatatan']) && ($galat = Kalimat::periksa((string) ($data['catatan'] ?? ''), 15))) {
+            return $galat;
+        }
+        if (! $paham) {
+            return 'Centang "Saya mengerti lamaran saya akan ditutup" untuk melanjutkan.';
+        }
+
+        return null;
     }
 
-    /** @return array{0: ?int, 1: ?object} */
-    private function sasaran(string $id): array
+    private static function rapikan(?string $teks): ?string
     {
-        $realId = Hashids::decode($id)[0] ?? null;
+        $t = trim(preg_replace('/\s+/u', ' ', strip_tags((string) $teks)));
 
-        return [$realId, $realId && KonfirmasiJadwal::siap() ? KonfirmasiJadwal::konteks((int) $realId) : null];
+        return mb_strlen($t) >= 5 ? mb_substr($t, 0, 1000) : null;
     }
 
-    /**
-     * Sasaran pintu PORTAL: hanya jadwal milik akun yang sedang masuk. Admin
-     * yang menengok portal tidak bisa menjawab atas nama kandidat dari sini —
-     * itu jalurnya "Catat jawaban" di worklist.
-     *
-     * @return array{0: ?int, 1: ?object}
-     */
-    private function milikSendiri(string $id): array
+    /** `terkunci` memberi tahu layar untuk memuat ulang aturannya. */
+    private static function tolak(int $kode, string $pesan, ?string $status, bool $terkunci = false)
     {
-        [$realId, $sub] = $this->sasaran($id);
-        $saya = (int) session('career_auth.id');
-
-        return $sub && $saya > 0 && (int) $sub->Id_Users === $saya ? [$realId, $sub] : [null, null];
+        return response()->json([
+            'success' => false,
+            'status' => $kode,
+            'message' => $pesan,
+            'result' => ['status' => $status ?: null, 'terkunci' => $terkunci],
+        ], $kode);
     }
 
-    /**
-     * Pelaku jawaban. Kanal PORTAL bila yang membuka sedang masuk sebagai
-     * kandidat pemilik undangan; selain itu TAUTAN (dari surel).
-     */
-    private function pelaku(Request $request, object $sub): array
+    /** Jejak pelaku — kanal & perangkat, tanpa menyimpan user agent utuh. */
+    private function pelaku(Request $request, string $kanal): array
     {
-        $portal = (int) session('career_auth.id') === (int) $sub->Id_Users;
-
         return [
-            'jenis' => KonfirmasiJadwal::KANDIDAT,
-            'kanal' => $portal ? KonfirmasiJadwal::K_PORTAL : KonfirmasiJadwal::K_TAUTAN,
-            'nama' => (string) $sub->KandidatNama,
-            'id' => (int) $sub->Id_Users,
+            'jenis' => 'KANDIDAT',
+            'kanal' => $kanal,
             'ip' => $request->ip(),
             'perangkat' => self::perangkat((string) $request->userAgent()),
         ];
     }
 
-    /** Ringkasan perangkat — cukup untuk membaca jejak, tanpa menyimpan UA utuh. */
     private static function perangkat(string $ua): string
     {
         $os = match (true) {
@@ -243,89 +379,68 @@ class KonfirmasiJadwalController extends Controller
         return $os.' · '.$peramban;
     }
 
-    /** Seluruh bahan halaman untuk satu tautan sah. */
-    private function muatan(object $sub, int $versi): array
+    /** Render halaman + kepala keamanan (tanpa indeks, tanpa rujukan, tanpa bingkai). */
+    private function tampil(array $props)
     {
-        $id = (int) $sub->Id_Lamaran_Tahap_Tes;
-        $versiKini = (int) ($sub->Jadwal_Versi ?? 0);
-        $judul = [
-            'aktivitas' => $sub->Label,
-            'posisi' => $sub->Posisi ?: $sub->ProgramNama,
-            'program' => $sub->ProgramNama,
-            'tahap' => $sub->TahapLabel,
-            'kode' => $sub->LamaranKode,
-            'nama' => $sub->KandidatNama,
-        ];
+        return Inertia::render(self::HALAMAN, $props)
+            ->toResponse(request())
+            ->withHeaders([
+                'X-Robots-Tag' => 'noindex, nofollow',
+                'Referrer-Policy' => 'no-referrer',
+                'Cache-Control' => 'no-store, private',
+                'Content-Security-Policy' => "frame-ancestors 'none'",
+            ]);
+    }
 
-        $keadaan = match (true) {
-            ($sub->StatusLamaran ?? '') !== 'BERJALAN' => 'LAMARAN_SELESAI',
-            ($sub->Flag_Selesai ?? 'T') === 'Y' || ! empty($sub->Jadwal_Hadir) => 'SELESAI',
-            empty($sub->Jadwal_Mulai) => 'DITUNDA',
-            $versiKini !== $versi => 'VERSI_LAMA',
-            empty($sub->Konfirmasi_Status) => 'TIDAK_BERLAKU',
-            Carbon::parse($sub->Jadwal_Mulai)->lte(now()) => 'ACARA_LEWAT',
-            default => 'TERBUKA',
-        };
+    /** Seluruh bahan halaman untuk satu tautan sah. */
+    private function muatan(array $s, int $versi): array
+    {
+        $konf = $s['konf'];
+        $props = self::blok($konf);
+        $versiKini = (int) ($konf['versi'] ?? 0);
+        $mulai = ($konf['mulai'] ?? null) ?: ($props['jadwal']['mulai'] ?? null);
+        $keadaan = (string) ($props['keadaan'] ?? 'TAUTAN_RUSAK');
 
-        $props = ['keadaan' => $keadaan, 'judul' => $judul];
+        $idPublik = DB::table('N_WEB_CAREERS_Lamaran')->where('Kode', $s['kode'])->value('Id_Lamaran');
+        $portal = $idPublik ? url('/kandidat/lamaran/'.Hashids::encode($idPublik)) : url('/kandidat/portal');
 
-        // Ditunda: kandidat wajib tahu alasannya, perkiraan jadwal pengganti
-        // (atau "akan dikabarkan"), dan pesan tim — bukan sekadar "ditunda".
-        if ($keadaan === 'DITUNDA' && ($sub->Konfirmasi_Status ?? null) === KonfirmasiJadwal::DITUNDA) {
-            $props['tunda'] = KonfirmasiJadwal::tundaUntukKandidat(KonfirmasiJadwal::infoTunda($id));
-            $props['url'] = ['portal' => url('/kandidat/lamaran/'.Hashids::encode($sub->Lamaran_Id))];
-
-            return $props;
+        if ($versiKini !== $versi && ! in_array($keadaan, ['LAMARAN_SELESAI', 'SELESAI'], true)) {
+            // Versi lama: arahkan ke undangan terbaru. Pemegang tautan sah adalah
+            // kandidatnya sendiri, jadi tautan versi kini tidak memperluas akses.
+            return [
+                'keadaan' => 'VERSI_LAMA',
+                'judul' => $props['judul'] ?? [],
+                'urlTerbaru' => $this->tautan('career.konfirmasi.halaman', $s, $versiKini, $mulai),
+                'jadwalTerbaru' => $props['jadwal']['waktuTeks'] ?? null,
+            ];
         }
 
-        // Versi lama yang masih punya penerus: arahkan ke undangan terbaru.
-        // Pemegang tautan sah untuk aktivitas ini adalah kandidatnya sendiri,
-        // jadi menerbitkan tautan versi kini tidak memperluas akses siapa pun.
-        if ($keadaan === 'VERSI_LAMA') {
-            $props['urlTerbaru'] = ! empty($sub->Konfirmasi_Status)
-                ? KonfirmasiJadwal::tautan($id, $versiKini, (string) $sub->Jadwal_Mulai)
-                : null;
-            $props['jadwalTerbaru'] = UndanganJadwal::waktuTeks($sub->Jadwal_Mulai, $sub->Jadwal_Selesai);
-
-            return $props;
+        if ($keadaan === 'TERBUKA' && $mulai && Carbon::parse($mulai)->lte(now())) {
+            $keadaan = 'ACARA_LEWAT';
         }
+        $props['keadaan'] = $keadaan;
 
-        if (! in_array($keadaan, ['TERBUKA', 'ACARA_LEWAT'], true)) {
-            return $props;
+        $props['url'] = ['portal' => $portal];
+        if (in_array($keadaan, ['TERBUKA', 'ACARA_LEWAT'], true)) {
+            $props['url'] += [
+                'jawab' => $this->tautan('career.konfirmasi.jawab', $s, $versi, $mulai),
+                'cabut' => $this->tautan('career.konfirmasi.cabut', $s, $versi, $mulai),
+            ];
         }
-
-        $mode = UndanganJadwal::mode($sub->Jadwal_Mode);
-        $daring = strtoupper((string) $sub->Jadwal_Mode) === 'DARING';
-        $tempat = $daring ? null : LamaranController::tempatJadwal($sub);
-
-        $props['jadwal'] = [
-            'waktuTeks' => UndanganJadwal::waktuTeks($sub->Jadwal_Mulai, $sub->Jadwal_Selesai),
-            'mulai' => (string) $sub->Jadwal_Mulai,
-            'modeNama' => $mode->Nama ?? $sub->Jadwal_Mode,
-            'daring' => $daring,
-            'link' => $daring ? $sub->Jadwal_Link : null,
-            'tempat' => $tempat ? [
-                'nama' => $tempat['nama'] ?? null,
-                'alamat' => $tempat['alamatLengkap'] ?? null,
-                'mapsUrl' => $tempat['mapsUrl'] ?? null,
-            ] : null,
-            'detailLokasi' => $daring ? null : ($sub->Jadwal_Lokasi ?: null),
-            'kontak' => $sub->Jadwal_Kontak ?? null,
-            'instruksi' => $sub->Jadwal_Catatan ?: null,
-        ];
-
-        // Status, pilihan, alasan, permintaan, jatah, aturan usulan & aturan
-        // ubah — SAMA PERSIS dengan kartu jadwal portal (bahanJawab).
-        $mulai = (string) $sub->Jadwal_Mulai;
-        $props += KonfirmasiJadwal::bahanJawab($sub, $versi, [
-            'jawab' => KonfirmasiJadwal::tautan($id, $versi, $mulai, 'jawab'),
-            'cabut' => KonfirmasiJadwal::tautan($id, $versi, $mulai, 'cabut'),
-            'dibuka' => KonfirmasiJadwal::tautan($id, $versi, $mulai, 'dibuka'),
-            'portal' => url('/kandidat/lamaran/'.Hashids::encode($sub->Lamaran_Id)),
-        ]);
-
-        Log::channel('web_career')->info("[KONFIRMASI] halaman aktivitas #{$id} v{$versi} dimuat ({$keadaan}).");
 
         return $props;
+    }
+
+    /** Tautan bertanda tangan untuk aktivitas ini — berlaku sampai acaranya dimulai (maks. N hari). */
+    private function tautan(string $rute, array $s, int $versi, ?string $mulai): string
+    {
+        $maks = now()->addDays(max(1, (int) config('konfirmasi.tautan_hari_maks', 60)));
+        $sampai = $mulai ? Carbon::parse($mulai)->addDay() : $maks;
+
+        return URL::temporarySignedRoute($rute, $sampai->lt($maks) ? $sampai : $maks, [
+            'id' => Hashids::encode($s['id']),
+            'versi' => $versi,
+            'l' => $s['kode'],
+        ]);
     }
 }

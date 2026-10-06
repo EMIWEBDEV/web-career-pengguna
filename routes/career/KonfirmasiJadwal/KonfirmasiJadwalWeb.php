@@ -9,8 +9,9 @@ use Illuminate\Support\Facades\Route;
 |--------------------------------------------------------------------------
 |
 | Dibuka dari tombol di surel undangan: surel dibaca di aplikasi surat tanpa
-| sesi portal. Seluruh tautannya BERTANDA TANGAN (HMAC APP_KEY) + berumur, dan
-| terikat VERSI jadwal — tidak bisa ditebak, disunting, atau dipakai untuk
+| sesi portal. Seluruh tautannya BERTANDA TANGAN (kunci TAUTAN_KUNCI, dibuat
+| zona dalam) + berumur, terikat VERSI jadwal, dan membawa kode lamaran (`l`)
+| yang ikut ditandatangani — tidak bisa ditebak, disunting, atau dipakai untuk
 | jadwal yang sudah diganti.
 |
 | GET halaman memeriksa tanda tangannya sendiri (tautan rusak/kedaluwarsa
@@ -35,9 +36,6 @@ Route::prefix('karir/konfirmasi/{id}/{versi}')
             ->middleware(['signed', 'throttle:20,1'])
             ->name('cabut');
 
-        Route::post('/dibuka', [KonfirmasiJadwalController::class, 'dibuka'])
-            ->middleware(['signed', 'throttle:20,1'])
-            ->name('dibuka');
     });
 
 /*

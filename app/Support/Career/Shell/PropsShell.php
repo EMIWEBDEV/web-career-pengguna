@@ -53,7 +53,7 @@ class PropsShell
                     $hasil = array_merge($hasil, (array) $kelas::tambahan($url, $judul));
                 }
             } catch (\Throwable $e) {
-                Log::channel('web_career')->warning("Props tambahan {$kelas} gagal: " . $e->getMessage());
+                Log::warning("Props tambahan {$kelas} gagal: " . $e->getMessage());
             }
         }
 

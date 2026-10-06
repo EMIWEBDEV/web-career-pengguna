@@ -1,4 +1,4 @@
-<!-- WEB CAREER — Profil Saya. SATU halaman untuk kandidat, admin, & superadmin.
+<!-- WEB CAREER — Profil Saya (kandidat).
 
      Seluruh isinya datang dari prop `user` (App\Support\Career\ProfilPengguna),
      dibaca ulang dari DB setiap halaman dibuka. Tidak ada lagi cadangan dari
@@ -12,7 +12,7 @@
         <div class="wca-phead">
             <div>
                 <h1>Profil Saya</h1>
-                <p>{{ me?.adalahAdmin ? 'Informasi akun & hak akses Anda di panel Web Career.' : 'Informasi akun &amp; ringkasan lamaranmu di EVO Group.' }}</p>
+                <p>Informasi akun &amp; ringkasan lamaranmu di EVO Group.</p>
             </div>
         </div>
 
@@ -49,17 +49,11 @@
                     <div class="wca-dinfo">
                         <div><small>Email</small><b>{{ me.email || '—' }}</b></div>
                         <div><small>No. HP</small><b>{{ me.no_hp || '—' }}</b></div>
-                        <!-- KTP hanya untuk akun yang memang punya (kandidat mendaftar
-                             dengan NIK; akun admin dibuat lewat Master Akun tanpa itu). -->
                         <div v-if="me.nik"><small>No. KTP</small><b>{{ me.nik }}</b></div>
-                        <div v-if="me.kode_calon"><small>Kode Calon</small><b>{{ me.kode_calon }}</b></div>
                         <div><small>Klasifikasi Akun</small><b>{{ me.klasifikasiLabel || '—' }}</b></div>
                         <div><small>Masa Berlaku</small><b>{{ masaBerlaku }}</b></div>
                         <div><small>Terdaftar</small><b>{{ fmt(me.mulai_berlaku || me.terdaftarSejak) }}</b></div>
                         <div><small>Login Terakhir</small><b>{{ fmtDT(me.last_login_at) }}</b></div>
-                        <!-- Jembatan akun → karyawan HRIS. Hanya tampil bila memang
-                             tertaut; kosong pada akun yang belum dipasangkan. -->
-                        <div v-if="me.kodeKaryawan"><small>Kode Karyawan</small><b>{{ me.karyawanNama ? `${me.karyawanNama} (${me.kodeKaryawan})` : me.kodeKaryawan }}</b></div>
                     </div>
 
                     <div v-if="expiringSoon" class="wca-note wca-note--warn" style="margin-top: 1rem">
@@ -70,7 +64,7 @@
             </div>
 
             <div>
-                <!-- ══ RINGKASAN LAMARAN — KANDIDAT ══ -->
+                <!-- ══ RINGKASAN LAMARAN ══ -->
                 <div v-if="me.ringkasan" class="wca-card" style="margin-bottom: 1.25rem">
                     <div class="wca-card__head"><h3><i class="bi bi-bar-chart"></i> Ringkasan Lamaran</h3></div>
                     <div class="wca-card__body">
@@ -84,31 +78,7 @@
                     </div>
                 </div>
 
-                <!-- ══ AKSES & PERAN — ADMIN / SUPERADMIN ══
-                     Admin tidak melamar, jadi kartu "Ringkasan Lamaran" untuknya
-                     adalah tiga angka nol permanen. Yang berguna baginya adalah
-                     seberapa luas panel yang boleh ia buka. -->
-                <div v-else-if="me.akses" class="wca-card" style="margin-bottom: 1.25rem">
-                    <div class="wca-card__head"><h3><i class="bi bi-person-lock"></i> Akses &amp; Peran</h3></div>
-                    <div class="wca-card__body">
-                        <div class="wca-dinfo">
-                            <div><small>Peran</small><b>{{ me.roleLabel }}</b></div>
-                            <div><small>Halaman Dapat Dibuka</small><b>{{ me.akses.halaman }}</b></div>
-                            <div><small>Izin Aksi</small><b>{{ me.akses.aksi }}</b></div>
-                        </div>
-                        <!-- Angka di atas berasal dari paket sesi, bukan dibaca ulang
-                             dari DB: paket itulah yang benar-benar berlaku sampai
-                             login berikutnya. Catatannya ditulis supaya pemiliknya
-                             tidak menyangka menunya rusak saat aksesnya baru diubah. -->
-                        <div class="wca-note wca-note--info" style="margin-top: 1rem">
-                            <i class="bi bi-info-circle"></i>
-                            <span>Hak akses yang baru diubah admin lain berlaku setelah Anda masuk kembali.</span>
-                        </div>
-                        <Link href="/karir" class="wca-btn wca-btn--soft" style="width: 100%; margin-top: 1rem"><i class="bi bi-speedometer2"></i> Buka Dashboard</Link>
-                    </div>
-                </div>
-
-                <!-- ══ KEAMANAN — semua peran ══ -->
+                <!-- ══ KEAMANAN ══ -->
                 <div class="wca-card">
                     <div class="wca-card__head"><h3><i class="bi bi-shield-check"></i> Keamanan</h3></div>
                     <div class="wca-card__body">
@@ -128,7 +98,7 @@
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
 import { computed } from 'vue';
-import { initials } from '@utils/career/admin';
+import { initials } from '@utils/career/inisial';
 
 const props = defineProps({
     user: { type: Object, default: null },
@@ -139,8 +109,8 @@ const aktif = computed(() => (me.value?.status || 'AKTIF') === 'AKTIF');
 
 // Warna badge peran. Superadmin sengaja dibedakan dari admin: dua peran itu
 // tidak sama besarnya, dan sebelumnya keduanya jatuh ke label "Kandidat".
-const PERAN_WARNA = { SUPERADMIN: 'wca-b--gold', ADMIN: 'wca-b--violet', KANDIDAT: 'wca-b--sky' };
-const PERAN_IKON = { SUPERADMIN: 'bi-shield-lock', ADMIN: 'bi-person-gear', KANDIDAT: 'bi-person-badge' };
+const PERAN_WARNA = { KANDIDAT: 'wca-b--sky' };
+const PERAN_IKON = { KANDIDAT: 'bi-person-badge' };
 const peranWarna = computed(() => PERAN_WARNA[me.value?.role] || 'wca-b--slate');
 const peranIkon = computed(() => PERAN_IKON[me.value?.role] || 'bi-person');
 

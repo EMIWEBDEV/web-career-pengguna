@@ -19,11 +19,9 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => [
-    'http://localhost:5173',
-    'http://192.168.20.28:8000', // Jika Anda menggunakan IP lokal
-    ],
-
+    // Portal & API dipanggil dari origin yang sama (Inertia) — tidak ada
+    // origin lain yang perlu diizinkan membaca jawabannya.
+    'allowed_origins' => [],
 
     'allowed_origins_patterns' => [],
 

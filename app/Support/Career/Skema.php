@@ -21,10 +21,9 @@ use Illuminate\Support\Facades\Schema;
  * `hasColumn()` menembak sys.columns, ±57 ms. Angka itu tidak terasa pada satu
  * panggilan, dan menjadi bencana begitu penjaganya duduk di dalam perulangan.
  *
- * Papan worklist satu lowongan berisi 352 kandidat pernah menghabiskan 326
- * DETIK, dan 158 detik di antaranya cuma pemeriksaan skema: dua penjaga yang
- * dipanggil sekali per aktivitas kandidat, 1.100 kali masing-masing. Endpoint-
- * nya tidak pernah selesai dimuat; rekruter melihat "pending" sampai menyerah.
+ * Satu halaman yang memanggil penjaga sekali per aktivitas kandidat pernah
+ * menghabiskan ratusan detik hanya untuk pemeriksaan skema, dan tidak pernah
+ * selesai dimuat.
  *
  * ══ CARANYA ════════════════════════════════════════════════════════════════
  *
@@ -40,17 +39,17 @@ use Illuminate\Support\Facades\Schema;
  *
  * ══ SATU KUERI UNTUK SELURUH KOLOM MODUL ══════════════════════════════════
  *
- * Papan worklist memeriksa kolom di tujuh tabel berbeda — tujuh kueri
- * INFORMATION_SCHEMA per permintaan, ±60 ms masing-masing lewat jaringan.
+ * Satu permintaan bisa memeriksa kolom di beberapa tabel berbeda — satu kueri
+ * INFORMATION_SCHEMA per tabel, ±60 ms masing-masing lewat jaringan.
  * Pertanyaan pertama tentang tabel N_WEB_CAREERS_* kini memuat kolom SELURUH
  * tabel modul sekaligus (satu kueri), dan sisanya dijawab dari ingatan.
  *
  * ══ DAN DISIMPAN LINTAS PERMINTAAN ════════════════════════════════════════
  *
  * Kedua daftar (tabel, kolom modul) juga disimpan di cache BERKAS selama
- * CACHE_DETIK. Tanpa itu, setiap permintaan setiap rekruter membayar ±0,5
- * detik INFORMATION_SCHEMA — dengan puluhan rekruter serempak, beban itu
- * menumpuk di basis data. Store `file` dipakai apa pun CACHE_DRIVER-nya.
+ * CACHE_DETIK. Tanpa itu, setiap permintaan membayar ±0,5 detik
+ * INFORMATION_SCHEMA — dengan banyak kandidat serempak, beban itu menumpuk di
+ * basis data. Store `file` dipakai apa pun CACHE_DRIVER-nya.
  * Sesudah menjalankan skrip SQL yang menambah tabel/kolom: tunggu CACHE_DETIK,
  * atau `php artisan cache:clear file`. Daftar KOSONG tidak pernah disimpan.
  */
@@ -94,29 +93,6 @@ final class Skema
     public static function adaKolom(string $tabel, string $kolom): bool
     {
         return isset(self::daftarKolom($tabel)[strtolower($kolom)]);
-    }
-
-    /**
-     * Lupakan yang sudah dibaca.
-     *
-     * Dipakai sesudah skrip skema dijalankan di dalam proses yang sama —
-     * pengujian, dan worker antrean yang berumur panjang. Tanpa ini, proses
-     * yang sudah terlanjur menyimpulkan "kolomnya belum ada" akan bertahan
-     * pada kesimpulan itu sampai ia mati.
-     */
-    public static function lupakan(): void
-    {
-        self::$tabel = null;
-        self::$kolom = [];
-        self::$tabelSatuan = [];
-        self::$kolomModulDimuat = false;
-
-        try {
-            Cache::store('file')->forget(self::CACHE_TABEL);
-            Cache::store('file')->forget(self::CACHE_KOLOM);
-        } catch (\Throwable $e) {
-            // cache berkas tak terjangkau — cukup ingatan proses yang dilupakan
-        }
     }
 
     /**

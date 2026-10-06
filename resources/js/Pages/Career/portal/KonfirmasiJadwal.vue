@@ -10,9 +10,8 @@
      menjawab tanpa pindah halaman. Jadwal yang DITUNDA menampilkan alasan,
      perkiraan jadwal pengganti, dan pesan tim (JadwalTunda). -->
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
-import { tandaiDibuka } from '@utils/career/konfirmasi';
 import KonfirmasiJawab from '@career/KonfirmasiJawab.vue';
 import JadwalTunda from '@career/JadwalTunda.vue';
 
@@ -94,9 +93,6 @@ function segarkan() {
     router.reload({ preserveScroll: true });
 }
 
-onMounted(() => {
-    if (terbuka.value) tandaiDibuka(props.url?.dibuka);
-});
 
 const salam = computed(() => {
     const n = String(props.judul?.nama || '').trim().split(/\s+/)[0];

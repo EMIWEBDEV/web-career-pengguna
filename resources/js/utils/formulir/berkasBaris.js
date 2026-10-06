@@ -12,9 +12,6 @@
 /** Susunan kunci komposit. HARUS sama dengan BerkasBaris::FORMAT_KUNCI. */
 export const FORMAT_KUNCI = '{bagian}[{baris}].{field}';
 
-/** Susunan label bernomor. HARUS sama dengan BerkasBaris::FORMAT_LABEL. */
-export const FORMAT_LABEL = '{label} #{nomor}';
-
 /**
  * Kunci komposit sebuah berkas.
  *
@@ -31,11 +28,3 @@ export function kunciBerkas(bagian, baris, field) {
         .replace('{field}', field);
 }
 
-/** Label bernomor untuk tampilan. Nomornya berbasis 1 — yang dibaca manusia. */
-export function labelBerkas(label, baris) {
-    if (baris === null || baris === undefined) {
-        return label;
-    }
-
-    return FORMAT_LABEL.replace('{label}', label).replace('{nomor}', String(baris + 1));
-}

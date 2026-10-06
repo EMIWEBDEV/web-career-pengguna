@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Support\Seo\SeoMeta;
+use App\Support\Sinkron\PenjagaZona;
+use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -17,16 +19,19 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // Zona luar menolak menyala bila memegang kredensial database admin.
+        PenjagaZona::periksa();
+
+        // Tautan bertanda tangan (konfirmasi kehadiran, surat pengantar) dibuat
+        // zona dalam untuk surelnya → kuncinya TAUTAN_KUNCI yang dipegang kedua
+        // zona, bukan APP_KEY aplikasi ini. Cadangan APP_KEY hanya untuk lokal.
+        URL::setKeyResolver(fn () => config('sinkron.kunci_tautan') ?: config('app.key'));
+
         /*
-         * Meta halaman disuntikkan ke SETIAP view yang punya <head>, bukan
-         * ditempel satu per satu di tiap controller. Konsekuensinya: halaman
-         * baru — termasuk modul admin yang belum ada saat ini — otomatis
-         * membawa judul, favicon, dan kartu pratinjau yang benar tanpa ada
-         * yang perlu diingat oleh siapa pun.
-         *
-         * Cukup dipasang pada 'components.seo' — satu-satunya view yang membaca
-         * $seo. Ia di-@include dari components.header, yang di-@include dari
-         * app.blade.php, jadi setiap halaman Inertia melewatinya.
+         * Meta halaman disuntikkan ke view 'components.seo' — satu-satunya view
+         * yang membaca $seo. Ia di-@include dari components.header, yang
+         * di-@include dari app.blade.php, jadi setiap halaman Inertia
+         * melewatinya.
          */
         View::composer('components.seo', function ($view) {
             $view->with('seo', app(SeoMeta::class)->resolve(request()));

@@ -57,7 +57,7 @@ class FaqPublik
                 ->values()
                 ->all();
         } catch (\Throwable $e) {
-            Log::channel('web_career')->warning('Gagal memuat FAQ landing: ' . $e->getMessage());
+            Log::warning('Gagal memuat FAQ landing: ' . $e->getMessage());
 
             return [];
         }
@@ -154,7 +154,7 @@ class FaqPublik
                 'faq' => $faq->values()->all(),
             ];
         } catch (\Throwable $e) {
-            Log::channel('web_career')->warning('Gagal memuat FAQ publik: ' . $e->getMessage());
+            Log::warning('Gagal memuat FAQ publik: ' . $e->getMessage());
 
             return ['kategori' => [], 'faq' => []];
         }

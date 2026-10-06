@@ -4,21 +4,27 @@ namespace App\Http\Controllers\Auth;
 
 use App\Helpers\ResponseHelper;
 use App\Http\Controllers\Controller;
-use App\Jobs\Career\WcSyncEmailJob;
-use App\Services\WebCareers\HclClient;
 use App\Support\Career\AksesService;
+use App\Support\Sinkron\Outbox;
+use App\Support\Sinkron\RahasiaSinkron;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 
 /**
- * WEB CAREER — AUTH (REAL, DB N_WEB_CAREERS_Users) memakai QUERY BUILDER.
+ * WEB CAREER — AUTH kandidat (tabel milik N_WEB_CAREERS_Users).
  * Controller WEB, dipanggil via axios ke route web ber-prefix api/v1 → balas JSON.
+ *
+ * DUA ZONA. Akun hidup di database publik; zona dalam menerima salinannya
+ * (tanpa kata sandi) lewat peristiwa Outbox. SUREL TIDAK DIKIRIM DARI SINI:
+ * tautan verifikasi dan kode reset dicatat sebagai `Akun.KodeDiminta` —
+ * kodenya dibungkus RahasiaSinkron — lalu zona dalam yang mengirim surelnya.
+ * Yang disimpan di tabel akun selalu HASH-nya saja.
  */
 class AuthController extends Controller
 {
@@ -70,37 +76,57 @@ class AuthController extends Controller
         ];
     }
 
-    /**
-     * Siapkan verifikasi email: simpan HASH token di DB (token asli tidak
-     * pernah disimpan), lalu antrekan pengiriman via queue 'wc-syncemailjob'.
-     * Gagal kirim email TIDAK boleh menggagalkan registrasi → dibungkus try.
-     */
-    private function kirimEmailVerifikasi(int $userId): void
+    /** Profil dasar akun untuk zona dalam — tanpa kata sandi, hash, maupun kode apa pun. */
+    private function profilAkun(int $userId): array
     {
-        try {
-            $token = Str::random(64); // dikirim utuh di magic link
-            $now = Carbon::now();
+        $r = DB::table($this->table)->where('Id_Users', $userId)->first();
 
-            DB::table($this->table)
-                ->where('Id_Users', $userId)
-                ->update([
-                    'Flag_Email_Verified' => 'T',
-                    'Email_Verified_At' => null,
-                    'Email_Verif_Token' => hash('sha256', $token),
-                    'Email_Verif_Expired_At' => $now->copy()->addMinutes(self::VERIF_BERLAKU_MENIT),
-                    'Email_Verif_Attempt' => DB::raw('ISNULL(Email_Verif_Attempt, 0) + 1'),
-                    'Updated_At' => $now,
-                ]);
+        return [
+            'id_publik' => (int) $r->Id_Users,
+            'nama' => $r->Nama,
+            'email' => $r->Email,
+            'no_hp' => $r->No_Hp,
+            'nik' => $r->NIK,
+            'role' => $r->Role,
+            'klasifikasi' => $r->Klasifikasi,
+            'status' => $r->Status,
+            'mulai_berlaku' => $r->Mulai_Berlaku ? (string) $r->Mulai_Berlaku : null,
+            'valid_until' => $r->Valid_Until ? (string) $r->Valid_Until : null,
+            'email_terverifikasi' => ($r->Flag_Email_Verified ?? 'T') === 'Y',
+        ];
+    }
 
-            WcSyncEmailJob::kirim(WcSyncEmailJob::JENIS_VERIFIKASI, $userId, ['token' => $token]);
+    /**
+     * Siapkan tautan verifikasi: HASH token disimpan di akun, tokennya sendiri
+     * ikut peristiwa `Akun.KodeDiminta` (terbungkus) supaya zona dalam bisa
+     * mengirim surelnya. Wajib dipanggil di dalam transaksi akunnya.
+     */
+    private function mintaSurelVerifikasi(int $userId): void
+    {
+        $token = Str::random(64);
+        $now = Carbon::now();
 
-            $conn = env('QUEUE_CONNECTION');
-            $queue = $conn === 'cloudtasks' ? WcSyncEmailJob::QUEUE : 'default';
-            Log::info("[EMAIL] job verifikasi DI-ANTRE user #{$userId} (conn={$conn}, queue={$queue}).");
-        } catch (\Throwable $e) {
-            Log::error("[EMAIL] gagal antre verifikasi user #{$userId}: " . $e->getMessage());
-            Log::channel('web_career')->error("[EMAIL] gagal antre verifikasi user #{$userId}: " . $e->getMessage());
-        }
+        DB::table($this->table)
+            ->where('Id_Users', $userId)
+            ->update([
+                'Flag_Email_Verified' => 'T',
+                'Email_Verified_At' => null,
+                'Email_Verif_Token' => hash('sha256', $token),
+                'Email_Verif_Expired_At' => $now->copy()->addMinutes(self::VERIF_BERLAKU_MENIT),
+                'Email_Verif_Sent_At' => $now,
+                'Email_Verif_Attempt' => DB::raw('ISNULL(Email_Verif_Attempt, 0) + 1'),
+                'Updated_At' => $now,
+            ]);
+
+        $akun = DB::table($this->table)->where('Id_Users', $userId)->first(['Email', 'Nama']);
+        Outbox::tulis(Outbox::AKUN_KODE_DIMINTA, 'Akun.KodeDiminta:'.Str::uuid(), $userId, [
+            'id_publik' => $userId,
+            'email' => $akun->Email,
+            'nama' => $akun->Nama,
+            'jenis' => 'VERIFIKASI',
+            'berlaku_menit' => self::VERIF_BERLAKU_MENIT,
+            'rahasia' => RahasiaSinkron::bungkus(['token' => $token]),
+        ], $akun->Email);
     }
 
     /**
@@ -122,8 +148,8 @@ class AuthController extends Controller
         $pemilik = DB::table($this->table)->where('NIK', $data['nik'])->first();
         if ($pemilik) {
             return ResponseHelper::error(
-                'Nomor KTP ini sudah terdaftar pada akun dengan email ' .
-                    $this->maskEmail($pemilik->Email) .
+                'Nomor KTP ini sudah terdaftar pada akun dengan email '.
+                    $this->maskEmail($pemilik->Email).
                     '. Satu KTP hanya untuk satu akun — silakan masuk memakai akun tersebut.',
                 422,
             );
@@ -139,15 +165,9 @@ class AuthController extends Controller
                 'nama' => 'required|string|max:150',
                 'email' => 'required|email|max:150',
                 // NOMOR HP: ANGKA SAJA, 8–15 digit termasuk kode negara (batas E.164).
-                //
-                // Ditegakkan DI SERVER, bukan cukup di layar. Aturan yang hanya hidup
-                // di browser bukan aturan: pintu ini bisa diketuk langsung, dan huruf
-                // yang lolos masuk akan mendarat di HRIS Rekrutmen lewat sinkron
-                // biodata — lalu ada yang mencoba menelepon nomor yang tak bisa
-                // ditelepon siapa pun.
-                //
-                // Awalan '62' SENGAJA tidak dituntut: negaranya dipilih kandidat,
-                // dan memaksa +62 menutup pintu bagi pelamar luar negeri.
+                // Ditegakkan DI SERVER, bukan cukup di layar: pintu ini bisa
+                // diketuk langsung. Awalan '62' SENGAJA tidak dituntut — negaranya
+                // dipilih kandidat, dan memaksa +62 menutup pintu pelamar luar negeri.
                 'phone' => ['nullable', 'string', 'regex:/^[0-9]{8,15}$/'],
                 // KTP/NIK: WAJIB tepat 16 digit (tidak boleh kurang / lebih).
                 'nik' => 'required|digits:16',
@@ -164,15 +184,14 @@ class AuthController extends Controller
         $autoVerifikasi = $this->autoVerifikasiEmailAktif();
 
         // ── CEK KTP (ulang, defense-in-depth): satu NIK hanya SATU akun kandidat.
-        //    Bila NIK sudah terpakai akun lain, tolak & tunjukkan emailnya (mask). ──
         $pemilikNik = DB::table($this->table)
             ->where('NIK', $data['nik'])
             ->where('Email', '!=', $data['email'])
             ->first();
         if ($pemilikNik) {
             return ResponseHelper::error(
-                'Nomor KTP ini sudah terdaftar pada akun dengan email ' .
-                    $this->maskEmail($pemilikNik->Email) .
+                'Nomor KTP ini sudah terdaftar pada akun dengan email '.
+                    $this->maskEmail($pemilikNik->Email).
                     '. Satu KTP hanya untuk satu akun — silakan masuk memakai akun tersebut.',
                 422,
             );
@@ -190,8 +209,6 @@ class AuthController extends Controller
 
         if ($existing) {
             $terverifikasi = ($existing->Flag_Email_Verified ?? 'T') === 'Y';
-            // Masa berlaku pendaftaran mengikuti KLASIFIKASI akun (mis. trial
-            // 6 bulan → Valid_Until = tanggal daftar + Durasi_Hari klasifikasi).
             $masihBerlaku =
                 $existing->Status === 'AKTIF' &&
                 ($existing->Valid_Until === null ||
@@ -202,7 +219,7 @@ class AuthController extends Controller
             // Ditolak HANYA bila akun terverifikasi DAN masih dalam masa berlaku.
             if ($terverifikasi && $masihBerlaku) {
                 $sampai = $existing->Valid_Until
-                    ? ' hingga ' . Carbon::parse($existing->Valid_Until)->format('d M Y')
+                    ? ' hingga '.Carbon::parse($existing->Valid_Until)->format('d M Y')
                     : '';
 
                 return ResponseHelper::error(
@@ -214,8 +231,6 @@ class AuthController extends Controller
             // Dua kasus yang BOLEH daftar ulang (akun di-klaim ulang):
             //  1. Belum pernah verifikasi email — kepemilikan email belum
             //     terbukti, jadi pendaftar sekarang berhak mengambil alih.
-            //     Tanpa ini, orang yang telat verifikasi akan selamanya
-            //     mentok "email sudah terdaftar" tanpa pernah dapat email.
             //  2. Sudah terverifikasi tapi masa berlaku klasifikasinya habis
             //     (mis. trial 6 bulan lewat) / akun nonaktif.
             $perubahan = [
@@ -235,24 +250,23 @@ class AuthController extends Controller
                 $perubahan = array_merge($perubahan, $this->dataAutoVerifikasiEmail($now));
             }
 
-            DB::table($this->table)->where('Id_Users', $existing->Id_Users)->update($perubahan);
+            $userId = (int) $existing->Id_Users;
+            DB::transaction(function () use ($userId, $perubahan, $autoVerifikasi, $data) {
+                DB::table($this->table)->where('Id_Users', $userId)->update($perubahan);
 
-            // Sinkron identitas ke HCLearn via API (buat/lengkapi calon).
-            $this->daftarkanHrisRekrutmen(
-                (int) $existing->Id_Users,
-                $data['nama'],
-                $data['email'],
-                $data['phone'] ?? $existing->No_Hp,
-                $data['nik'],
-            );
+                Outbox::tulis(Outbox::AKUN_DIPERBARUI, 'Akun.Diperbarui:'.Str::uuid(), $userId, [
+                    'akun' => $this->profilAkun($userId),
+                    'perubahan' => ['daftar_ulang'],
+                ], $data['email']);
 
-            if ($autoVerifikasi) {
-                Log::info("[EMAIL] auto-verifikasi development untuk user #{$existing->Id_Users} ({$data['email']}).");
-            } else {
-                $this->kirimEmailVerifikasi((int) $existing->Id_Users);
-            }
+                if (! $autoVerifikasi) {
+                    $this->mintaSurelVerifikasi($userId);
+                }
+            });
 
             if ($autoVerifikasi) {
+                Log::info("[AUTH] auto-verifikasi development untuk user #{$userId} ({$data['email']}).");
+
                 return ResponseHelper::success(
                     ['email' => $data['email'], 'perlu_verifikasi' => false],
                     'Pendaftaran berhasil. Email otomatis terverifikasi dalam mode development; silakan masuk.',
@@ -288,13 +302,25 @@ class AuthController extends Controller
             $akunBaru = array_merge($akunBaru, $this->dataAutoVerifikasiEmail($now));
         }
 
-        $id = DB::table($this->table)->insertGetId($akunBaru, 'Id_Users');
+        // Akun + peristiwanya SATU transaksi. Zona dalam membuat salinan akun
+        // (tanpa sandi) dan mendaftarkan calon ke HCLearn dari Akun.Terdaftar —
+        // aplikasi ini tidak menghubungi layanan dalam mana pun.
+        $id = DB::transaction(function () use ($akunBaru, $autoVerifikasi, $data) {
+            $id = (int) DB::table($this->table)->insertGetId($akunBaru, 'Id_Users');
 
-        // Daftarkan ke HCLearn via API + set Kode_Calon (identitas HCLearn, prefix CK).
-        $this->daftarkanHrisRekrutmen((int) $id, $data['nama'], $data['email'], $data['phone'] ?? null, $data['nik']);
+            Outbox::tulis(Outbox::AKUN_TERDAFTAR, 'Akun.Terdaftar:'.$id, $id, [
+                'akun' => $this->profilAkun($id),
+            ], $data['email']);
+
+            if (! $autoVerifikasi) {
+                $this->mintaSurelVerifikasi($id);
+            }
+
+            return $id;
+        });
 
         if ($autoVerifikasi) {
-            Log::info("[EMAIL] auto-verifikasi development untuk user #{$id} ({$data['email']}).");
+            Log::info("[AUTH] auto-verifikasi development untuk user #{$id} ({$data['email']}).");
 
             return ResponseHelper::success(
                 ['email' => $data['email'], 'perlu_verifikasi' => false],
@@ -303,65 +329,17 @@ class AuthController extends Controller
             );
         }
 
-        $this->kirimEmailVerifikasi((int) $id);
-
         // TIDAK auto-login: kandidat wajib verifikasi email dulu baru bisa masuk.
         return ResponseHelper::success(
             ['email' => $data['email'], 'perlu_verifikasi' => true],
-            'Registrasi berhasil! Kami telah mengirim tautan verifikasi ke email kamu (berlaku ' .
-                self::VERIF_BERLAKU_MENIT .
+            'Registrasi berhasil! Kami telah mengirim tautan verifikasi ke email kamu (berlaku '.
+                self::VERIF_BERLAKU_MENIT.
                 ' menit). Setelah verifikasi, silakan masuk.',
             201,
         );
     }
 
-    /**
-     * Daftarkan kandidat ke HCLearn LEWAT API (POST api/v1/web-careers/kandidat)
-     * — TIDAK lagi insert langsung ke HRIS_Rekrutmen_Karyawan. Kode_Calon dibuat
-     * oleh CAT memakai aturan internalnya (prefix 'CK', sama dengan insert data
-     * calon), lalu disimpan ke Users.Kode_Calon.
-     *
-     * Idempoten di sisi CAT (kunci Id_WC_Users): registrasi ulang mengembalikan
-     * Kode_Calon lama. Best-effort — kegagalan API tidak menggagalkan registrasi;
-     * Kode_Calon menyusul (kandidat tanpa kode tertahan saat penjadwalan tes,
-     * dengan pesan yang sudah ada di modul Penjadwalan).
-     */
-    private function daftarkanHrisRekrutmen(int $idUsers, string $nama, string $email, ?string $hp, string $nik): void
-    {
-        try {
-            $hasil = app(HclClient::class)->post(
-                'kandidat',
-                [
-                    'Id_WC_Users' => $idUsers,
-                    'Nama' => $nama,
-                    'Email' => $email,
-                    'HP' => $hp,
-                    'NIK' => $nik,
-                ],
-                [
-                    'Jenis_Event' => 'REGISTRASI_KANDIDAT',
-                ],
-            );
-
-            $kodeCalon = $hasil['result']['Kode_Calon'] ?? null;
-            if (!$hasil['sukses'] || !$kodeCalon) {
-                Log::channel('web_career')->error(
-                    "Registrasi kandidat #{$idUsers} ke HCLearn gagal: " . ($hasil['message'] ?? 'tanpa pesan'),
-                );
-
-                return;
-            }
-
-            DB::table($this->table)
-                ->where('Id_Users', $idUsers)
-                ->update(['Kode_Calon' => $kodeCalon]);
-            Log::channel('web_career')->info("Kandidat #{$idUsers} terdaftar di HCLearn: {$kodeCalon}");
-        } catch (\Throwable $e) {
-            Log::channel('web_career')->error("Gagal daftarkan kandidat #{$idUsers} ke HCLearn: " . $e->getMessage());
-        }
-    }
-
-    /** Samarkan email untuk pesan publik: fransbachtiar4@gmail.com → f***********4@gmail.com */
+    /** Samarkan email untuk pesan publik: nama@contoh.com → n**a@contoh.com */
     private function maskEmail(?string $email): string
     {
         $email = (string) $email;
@@ -373,10 +351,10 @@ class AuthController extends Controller
         $domain = substr($email, $at);
         $len = strlen($lokal);
         if ($len <= 2) {
-            return $lokal[0] . '***' . $domain;
+            return $lokal[0].'***'.$domain;
         }
 
-        return $lokal[0] . str_repeat('*', max(3, $len - 2)) . $lokal[$len - 1] . $domain;
+        return $lokal[0].str_repeat('*', max(3, $len - 2)).$lokal[$len - 1].$domain;
     }
 
     /**
@@ -386,9 +364,6 @@ class AuthController extends Controller
      *  - sudah       : sudah pernah terverifikasi (idempoten — link diklik 2x)
      *  - kadaluarsa  : token benar tapi lewat masa berlaku → tombol kirim ulang
      *  - invalid     : token salah/kosong → form tempel tautan/token manual
-     * Token dibandingkan sebagai HASH SHA-256 (constant-time) dan SEKALI PAKAI
-     * (dihapus setelah sukses). Bila email tak dikirim (kandidat hanya menempel
-     * token), pencarian jatuh ke hash token.
      */
     public function verifikasiEmail(Request $request)
     {
@@ -449,7 +424,7 @@ class AuthController extends Controller
         $data = $request->validate(['email' => 'required|email']);
 
         $row = DB::table($this->table)->where('Email', $data['email'])->first();
-        if (!$row) {
+        if (! $row) {
             return ResponseHelper::error('Email tidak terdaftar.', 404);
         }
 
@@ -459,9 +434,7 @@ class AuthController extends Controller
     /**
      * Inti verifikasi token, dipakai bersama magic-link (GET) & tempel-token (POST).
      * Mengembalikan ['status' => sukses|sudah|kadaluarsa|invalid, 'email' => ?string].
-     * Token dibandingkan sebagai HASH SHA-256 (constant-time) dan SEKALI PAKAI
-     * (dihapus setelah sukses). Bila email tak diketahui (hanya token), pencarian
-     * jatuh ke hash token karena kolomnya unik per akun.
+     * Token dibandingkan sebagai HASH SHA-256 (constant-time) dan SEKALI PAKAI.
      */
     private function terapkanVerifikasiToken(string $email, string $token): array
     {
@@ -473,11 +446,11 @@ class AuthController extends Controller
         if ($email !== '') {
             $row = DB::table($this->table)->where('Email', $email)->first();
         }
-        if (!$row) {
+        if (! $row) {
             $row = DB::table($this->table)->where('Email_Verif_Token', hash('sha256', $token))->first();
         }
 
-        if (!$row) {
+        if (! $row) {
             return ['status' => 'invalid', 'email' => null];
         }
 
@@ -486,7 +459,7 @@ class AuthController extends Controller
             return ['status' => 'sudah', 'email' => $row->Email];
         }
 
-        if (!$row->Email_Verif_Token || !hash_equals($row->Email_Verif_Token, hash('sha256', $token))) {
+        if (! $row->Email_Verif_Token || ! hash_equals($row->Email_Verif_Token, hash('sha256', $token))) {
             return ['status' => 'invalid', 'email' => null];
         }
 
@@ -494,18 +467,26 @@ class AuthController extends Controller
             return ['status' => 'kadaluarsa', 'email' => $row->Email];
         }
 
-        // Sukses → tandai verified + hapus token (sekali pakai).
-        DB::table($this->table)
-            ->where('Id_Users', $row->Id_Users)
-            ->update([
-                'Flag_Email_Verified' => 'Y',
-                'Email_Verified_At' => Carbon::now(),
-                'Email_Verif_Token' => null,
-                'Email_Verif_Expired_At' => null,
-                'Updated_At' => Carbon::now(),
-            ]);
+        // Sukses → tandai verified + hapus token (sekali pakai), kabarkan ke dalam.
+        $userId = (int) $row->Id_Users;
+        DB::transaction(function () use ($userId, $row) {
+            DB::table($this->table)
+                ->where('Id_Users', $userId)
+                ->update([
+                    'Flag_Email_Verified' => 'Y',
+                    'Email_Verified_At' => Carbon::now(),
+                    'Email_Verif_Token' => null,
+                    'Email_Verif_Expired_At' => null,
+                    'Updated_At' => Carbon::now(),
+                ]);
 
-        Log::channel('web_career')->info("[EMAIL] user #{$row->Id_Users} ({$row->Email}) terverifikasi.");
+            Outbox::tulis(Outbox::AKUN_DIPERBARUI, 'Akun.Diperbarui:'.Str::uuid(), $userId, [
+                'akun' => $this->profilAkun($userId),
+                'perubahan' => ['email_terverifikasi'],
+            ], $row->Email);
+        });
+
+        Log::info("[AUTH] user #{$userId} terverifikasi.");
 
         return ['status' => 'sukses', 'email' => $row->Email];
     }
@@ -516,7 +497,7 @@ class AuthController extends Controller
         $data = $request->validate(['email' => 'required|email']);
 
         $row = DB::table($this->table)->where('Email', $data['email'])->first();
-        if (!$row) {
+        if (! $row) {
             return ResponseHelper::error('Email tidak terdaftar.', 404);
         }
 
@@ -534,7 +515,7 @@ class AuthController extends Controller
             );
         }
 
-        $this->kirimEmailVerifikasi((int) $row->Id_Users);
+        DB::transaction(fn () => $this->mintaSurelVerifikasi((int) $row->Id_Users));
 
         return ResponseHelper::success(
             null,
@@ -569,18 +550,20 @@ class AuthController extends Controller
 
         // Turnstile (opsional): bila secret dikonfigurasi, token WAJIB & harus lolos verifikasi.
         $secret = config('services.cloudflare.turnstile_secret');
-        if (!empty($secret)) {
+        if (! empty($secret)) {
             $token = (string) $request->input('turnstile_token', '');
-            if ($token === '' || !$this->verifyTurnstile($secret, $token, $request->ip())) {
+            if ($token === '' || ! $this->verifyTurnstile($secret, $token, $request->ip())) {
                 return ResponseHelper::error('Verifikasi keamanan gagal. Selesaikan captcha lalu coba lagi.', 400);
             }
         }
 
         $row = DB::table($this->table)->where('Email', $data['email'])->first();
 
-        // if (!$row || !Hash::check($data['password'], $row->Password)) {
-        //     return ResponseHelper::error('Email atau kata sandi salah.', 401);
-        // }
+        // Satu pesan untuk email tak dikenal maupun sandi salah — tidak
+        // membocorkan email mana yang terdaftar.
+        if (! $row || ! Hash::check($data['password'], (string) $row->Password)) {
+            return ResponseHelper::error('Email atau kata sandi salah.', 401);
+        }
 
         if ($row->Status !== 'AKTIF') {
             return ResponseHelper::error('Akun Anda dinonaktifkan. Silakan hubungi tim rekrutmen EVO Group.', 403);
@@ -608,7 +591,7 @@ class AuthController extends Controller
                 ->lessThan(Carbon::now()->startOfDay())
         ) {
             return ResponseHelper::error(
-                'Masa berlaku akun Anda telah berakhir pada ' . Carbon::parse($row->Valid_Until)->format('d M Y') . '.',
+                'Masa berlaku akun Anda telah berakhir pada '.Carbon::parse($row->Valid_Until)->format('d M Y').'.',
                 403,
             );
         }
@@ -616,6 +599,9 @@ class AuthController extends Controller
         DB::table($this->table)
             ->where('Id_Users', $row->Id_Users)
             ->update(['Last_Login_At' => Carbon::now()]);
+
+        // Sesi baru untuk login baru — id sesi lama tidak terbawa (session fixation).
+        $request->session()->regenerate();
 
         $user = [
             'id' => $row->Id_Users,
@@ -625,19 +611,12 @@ class AuthController extends Controller
             'klasifikasi' => $row->Klasifikasi,
             'valid_until' => $row->Valid_Until,
             'pwd_epoch' => $row->Pwd_Changed_At,
-            // Jembatan ke MPP: penanggung jawabnya disimpan sebagai kode karyawan,
-            // bukan sebagai akun. Dibawa di sesi supaya penyaring lingkup PIC
-            // tidak perlu menanyakannya ke database pada setiap permintaan.
-            //
-            // Ikut kedaluwarsa bersama sesinya: kode yang diubah admin baru
-            // berlaku setelah pemiliknya masuk lagi — sama seperti perannya.
-            'kode_karyawan' => $row->Kode_Karyawan ?? null,
         ];
         $request->session()->put('career_auth', $user);
 
-        // Paket hak akses (permissions / label menu / kategori) — pola cat-evo.
-        // Kandidat yang belum punya baris akses di-provision otomatis dari cetakan
-        // klasifikasinya di dalam AksesService, jadi tidak perlu disentuh admin.
+        // Paket hak akses (permissions / label menu / kategori). Kandidat yang
+        // belum punya baris akses di-provision otomatis dari cetakan
+        // klasifikasinya di dalam AksesService.
         $request
             ->session()
             ->put('career_akses', AksesService::paket((int) $row->Id_Users, (string) $row->Role, $row->Klasifikasi));
@@ -675,26 +654,23 @@ class AuthController extends Controller
                 'Created_At' => Carbon::now(),
             ]);
         } catch (\Throwable $e) {
-            Log::channel('web_career')->error("[RESET] gagal audit '{$event}': " . $e->getMessage());
+            Log::warning("[RESET] gagal audit '{$event}': ".$e->getMessage());
         }
     }
 
     /**
-     * Siapkan OTP reset kata sandi: simpan HASH OTP di DB (OTP asli tidak pernah
-     * disimpan), setel masa berlaku, reset counter percobaan, dan hitung ulang
-     * window rate-limit di PHP (hindari fungsi khusus SQL Server). Pengiriman
-     * email dilakukan asinkron lewat WcSyncEmailJob; `Reset_Otp_Sent_At` diset di
-     * job SETELAH email benar-benar terkirim (mulai hitung cooldown).
+     * Siapkan OTP reset kata sandi: simpan HASH OTP di akun, setel masa
+     * berlaku, reset counter percobaan, hitung ulang window rate-limit, lalu
+     * catat `Akun.KodeDiminta` (OTP terbungkus) — surelnya dikirim zona dalam.
      */
-    private function kirimOtpReset(int $userId): void
+    private function catatOtpReset(int $userId): void
     {
-        try {
-            $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT); // 6 digit, CSPRNG
-            $now = Carbon::now();
+        $otp = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT); // 6 digit, CSPRNG
+        $now = Carbon::now();
 
+        DB::transaction(function () use ($userId, $otp, $now) {
             $row = DB::table($this->table)->where('Id_Users', $userId)->first();
 
-            // Window rate-limit dihitung di PHP (tanpa ISNULL/T-SQL) agar portabel.
             $windowMasihBerlaku =
                 $row &&
                 $row->Reset_Otp_Window_At &&
@@ -708,19 +684,21 @@ class AuthController extends Controller
                     'Reset_Otp_Hash' => hash('sha256', $otp),
                     'Reset_Otp_Expired_At' => $now->copy()->addMinutes(self::RESET_OTP_BERLAKU_MENIT),
                     'Reset_Otp_Attempt' => 0,
+                    'Reset_Otp_Sent_At' => $now,
                     'Reset_Otp_Kirim_Count' => $kirimCount,
                     'Reset_Otp_Window_At' => $windowAt,
                     'Updated_At' => $now,
                 ]);
 
-            WcSyncEmailJob::kirim(WcSyncEmailJob::JENIS_RESET_OTP, $userId, [
-                'otp' => $otp,
-                'menit' => self::RESET_OTP_BERLAKU_MENIT,
-            ]);
-        } catch (\Throwable $e) {
-            Log::error("[RESET] gagal antre OTP user #{$userId}: " . $e->getMessage());
-            Log::channel('web_career')->error("[RESET] gagal antre OTP user #{$userId}: " . $e->getMessage());
-        }
+            Outbox::tulis(Outbox::AKUN_KODE_DIMINTA, 'Akun.KodeDiminta:'.Str::uuid(), $userId, [
+                'id_publik' => $userId,
+                'email' => $row->Email,
+                'nama' => $row->Nama,
+                'jenis' => 'RESET',
+                'berlaku_menit' => self::RESET_OTP_BERLAKU_MENIT,
+                'rahasia' => RahasiaSinkron::bungkus(['otp' => $otp]),
+            ], $row->Email);
+        });
     }
 
     /**
@@ -741,9 +719,8 @@ class AuthController extends Controller
             $now = Carbon::now();
 
             // Cooldown HANYA berlaku selama masih ada OTP aktif (mencegah spam
-            // kirim-ulang saat kode lama masih hidup). Bila OTP sudah hangus
-            // (terkunci karena salah berkali-kali / sudah terpakai), user berhak
-            // langsung minta kode baru — cukup dibatasi kuota per jam.
+            // kirim-ulang saat kode lama masih hidup). Bila OTP sudah hangus,
+            // user berhak langsung minta kode baru — cukup dibatasi kuota per jam.
             $kenaCooldown =
                 $row->Reset_Otp_Hash &&
                 $row->Reset_Otp_Sent_At &&
@@ -765,8 +742,12 @@ class AuthController extends Controller
                     $kenaCooldown ? 'cooldown' : 'kuota window',
                 );
             } else {
-                $this->kirimOtpReset((int) $row->Id_Users);
-                $this->catatAuditReset($request, 'REQUEST', (int) $row->Id_Users, $row->Email);
+                try {
+                    $this->catatOtpReset((int) $row->Id_Users);
+                    $this->catatAuditReset($request, 'REQUEST', (int) $row->Id_Users, $row->Email);
+                } catch (\Throwable $e) {
+                    Log::error("[RESET] gagal mencatat permintaan OTP user #{$row->Id_Users}: ".$e->getMessage());
+                }
             }
         } else {
             // Email tidak terdaftar / non-aktif / belum verifikasi → tidak kirim.
@@ -775,8 +756,8 @@ class AuthController extends Controller
 
         return ResponseHelper::success(
             ['email' => $data['email']],
-            'Jika email terdaftar, kami telah mengirim kode OTP 6 digit (berlaku ' .
-                self::RESET_OTP_BERLAKU_MENIT .
+            'Jika email terdaftar, kami telah mengirim kode OTP 6 digit (berlaku '.
+                self::RESET_OTP_BERLAKU_MENIT.
                 ' menit). Silakan cek kotak masuk atau folder spam.',
         );
     }
@@ -785,8 +766,7 @@ class AuthController extends Controller
      * Inti pemeriksaan OTP terhadap baris user — dipakai bersama oleh verifikasiOtp
      * (cek dulu) dan gantiSandi (submit final). Efek samping: menaikkan counter
      * salah & menghanguskan OTP saat kedaluwarsa/terkunci. TIDAK mengganti password
-     * dan TIDAK mengonsumsi OTP saat cocok — supaya OTP yang sudah diverifikasi
-     * masih valid untuk langkah simpan kata sandi.
+     * dan TIDAK mengonsumsi OTP saat cocok.
      * Return: 'ok' | 'invalid' | 'expired' | 'locked'.
      */
     private function statusOtp(Request $request, ?object $row, string $otp, ?string $email = null): string
@@ -794,7 +774,7 @@ class AuthController extends Controller
         $emailAudit = $row?->Email ?? $email;
 
         // Tidak ada akun / tidak ada OTP aktif → generik "invalid" (anti-enumerasi).
-        if (!$row || !$row->Reset_Otp_Hash) {
+        if (! $row || ! $row->Reset_Otp_Hash) {
             $this->catatAuditReset(
                 $request,
                 'WRONG',
@@ -834,8 +814,8 @@ class AuthController extends Controller
             return 'locked';
         }
 
-        // Salah → tambah counter (di PHP); bila mencapai batas, hanguskan OTP.
-        if (!hash_equals($row->Reset_Otp_Hash, hash('sha256', $otp))) {
+        // Salah → tambah counter; bila mencapai batas, hanguskan OTP.
+        if (! hash_equals($row->Reset_Otp_Hash, hash('sha256', $otp))) {
             $percobaan = (int) ($row->Reset_Otp_Attempt ?? 0) + 1;
             $mencapaiBatas = $percobaan >= self::RESET_OTP_MAX_ATTEMPT;
 
@@ -852,7 +832,7 @@ class AuthController extends Controller
                 $mencapaiBatas ? 'LOCKED' : 'WRONG',
                 (int) $row->Id_Users,
                 $row->Email,
-                "attempt {$percobaan}/" . self::RESET_OTP_MAX_ATTEMPT,
+                "attempt {$percobaan}/".self::RESET_OTP_MAX_ATTEMPT,
             );
 
             return $mencapaiBatas ? 'locked' : 'invalid';
@@ -898,8 +878,7 @@ class AuthController extends Controller
     /**
      * Verifikasi OTP SAJA (POST api/v1/verifikasi-otp, body: email+otp) — dipakai
      * frontend untuk mengecek kode SEBELUM menampilkan form kata sandi baru. OTP
-     * TIDAK dikonsumsi di sini (masih dipakai saat submit gantiSandi), namun batas
-     * percobaan & kedaluwarsa tetap diberlakukan (anti brute-force).
+     * TIDAK dikonsumsi di sini, namun batas percobaan & kedaluwarsa tetap berlaku.
      */
     public function verifikasiOtp(Request $request)
     {
@@ -923,10 +902,9 @@ class AuthController extends Controller
     /**
      * Reset kata sandi dengan OTP (POST api/v1/ganti-sandi, body: email+otp+password).
      *
-     * OTP diperiksa ulang via statusOtp (constant-time, batas percobaan, kedaluwarsa)
-     * lalu SEKALI PAKAI (dihapus setelah sukses). Setelah sukses: semua sesi aktif
-     * user diinvalidasi (Pwd_Changed_At di-bump, dibaca ulang di CareerAuth), email
-     * pemberitahuan dikirim, dan peristiwa dicatat ke audit.
+     * OTP diperiksa ulang via statusOtp lalu SEKALI PAKAI. Setelah sukses: semua
+     * sesi aktif user diinvalidasi (Pwd_Changed_At di-bump, dibaca ulang di
+     * CareerAuth), surel pemberitahuan diminta ke zona dalam, dan dicatat ke audit.
      */
     public function gantiSandi(Request $request)
     {
@@ -943,26 +921,30 @@ class AuthController extends Controller
             return $this->responsOtpGagal($status);
         }
 
-        // OTP benar → ganti kata sandi, OTP SEKALI PAKAI (dihapus), dan bump
-        // Pwd_Changed_At sebagai "session epoch" → seluruh sesi aktif otomatis
-        // keluar pada permintaan berikutnya (dibaca ulang di CareerAuth).
         $now = Carbon::now();
-        DB::table($this->table)
-            ->where('Id_Users', $row->Id_Users)
-            ->update([
-                'Password' => Hash::make($data['password']),
-                'Reset_Otp_Hash' => null,
-                'Reset_Otp_Expired_At' => null,
-                'Reset_Otp_Attempt' => 0,
-                'Pwd_Changed_At' => $now,
-                'Updated_At' => $now,
-                'Updated_By' => $row->Email,
-            ]);
+        $userId = (int) $row->Id_Users;
+        DB::transaction(function () use ($userId, $data, $now, $row) {
+            DB::table($this->table)
+                ->where('Id_Users', $userId)
+                ->update([
+                    'Password' => Hash::make($data['password']),
+                    'Reset_Otp_Hash' => null,
+                    'Reset_Otp_Expired_At' => null,
+                    'Reset_Otp_Attempt' => 0,
+                    'Pwd_Changed_At' => $now,
+                    'Updated_At' => $now,
+                    'Updated_By' => $row->Email,
+                ]);
 
-        WcSyncEmailJob::kirim(WcSyncEmailJob::JENIS_RESET_SELESAI, (int) $row->Id_Users);
+            // Zona dalam mengirim surel "kata sandimu baru saja diganti".
+            Outbox::tulis(Outbox::AKUN_DIPERBARUI, 'Akun.Diperbarui:'.Str::uuid(), $userId, [
+                'akun' => $this->profilAkun($userId),
+                'perubahan' => ['sandi_diganti'],
+            ], $row->Email);
+        });
 
-        $this->catatAuditReset($request, 'SUCCESS', (int) $row->Id_Users, $row->Email);
-        Log::channel('web_career')->info("[RESET] user #{$row->Id_Users} ({$row->Email}) berhasil reset kata sandi.");
+        $this->catatAuditReset($request, 'SUCCESS', $userId, $row->Email);
+        Log::info("[RESET] user #{$userId} berhasil reset kata sandi.");
 
         // Bersihkan sesi tab yang melakukan reset.
         $request->session()->forget(['career_auth', 'career_akses']);
