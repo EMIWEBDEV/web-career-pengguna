@@ -1,0 +1,96 @@
+# ── RAHASIA & BERKAS BESAR YANG PERNAH TERGELETAK DI AKAR ──────────────────
+#
+# `.env` sudah lama disaring, tapi salinannya yang bernama lain tidak. Sempat
+# ada "ENV WEBCAREERS.txt" di akar berisi APP_KEY dan DB_PASSWORD lengkap,
+# untracked DAN tidak tersaring — satu `git add -A` sudah cukup mendorongnya ke
+# GitHub, dan kunci yang pernah masuk riwayat git tidak bisa ditarik lagi tanpa
+# menulis ulang riwayat.
+#
+# Disaring dari POLA, bukan nama berkas yang kebetulan itu: salinan berikutnya
+# hampir pasti bernama lain ("env production.txt", "ENV baru.txt").
+*[Ee][Nn][Vv]*.txt
+.env*
+!.env.example
+
+# Dump & arsip: satu berkas 187 MB membuat setiap clone dan setiap build Cloud
+# Run menyeretnya, selamanya, bahkan setelah dihapus dari working tree.
+*.zip
+*.7z
+*.rar
+/*.sql
+
+*.log
+.DS_Store
+.env.backup
+.env.production
+.phpactor.json
+.phpunit.result.cache
+/.codex
+/.cursor/
+/.idea
+/.nova
+/.phpunit.cache
+/.vscode
+/.zed
+/auth.json
+/node_modules
+/public/build
+/public/fonts-manifest.dev.json
+/public/hot
+/public/storage
+/storage/*.key
+/storage/pail
+/vendor
+_ide_helper.php
+Homestead.json
+Homestead.yaml
+Thumbs.db
+
+
+# STORAGE — ISINYA diabaikan, DIREKTORINYA tidak.
+#
+# Sebelumnya baris ini berbunyi `/storage/framework` polos, yang mengabaikan
+# seluruh pohonnya berikut berkas .gitignore penanda di dalamnya. Akibatnya
+# kloning baru — termasuk yang dilakukan Cloud Build dari GitHub — tidak punya
+# storage/framework/views sama sekali. config/view.php menghitung lokasi cache
+# Blade dengan realpath(), realpath() atas direktori yang tidak ada menghasilkan
+# false, dan `php artisan view:clear` gugur dengan "View path not found" lalu
+# menjatuhkan seluruh build.
+#
+# Yang dijaga sekarang hanya ISI-nya; penanda .gitignore di tiap direktori tetap
+# ikut, jadi struktur foldernya hidup di repo.
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+!/storage/framework/cache/data/
+/storage/framework/cache/data/*
+!/storage/framework/cache/data/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/testing/*
+!/storage/framework/testing/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/framework/*.php
+/storage/framework/down
+/storage/framework/maintenance.php
+
+# DATABASE/SQL — MIGRASI ikut repo, DUMP & SEED tidak.
+#
+# Dulu seluruh folder diabaikan, dan akibatnya perubahan skema yang sudah
+# dijalankan di basis data tidak punya jejak apa pun di repo: orang berikutnya
+# tidak bisa tahu kolom itu datang dari mana, apalagi mengulanginya di basis
+# data lain. Dua berkas migrasi lama sempat masuk sebelum aturan itu ada, lalu
+# sisanya tertinggal diam-diam.
+#
+# Yang diizinkan hanya berkas berpenanda tanggal (2026-08-08-anu.sql) — bentuk
+# yang memang dipakai untuk migrasi. Dump dan seed (N_WEB_CAREERS_Users.sql,
+# Cuti_Table.sql, 01_*.sql) TETAP diabaikan: isinya baris data, termasuk akun
+# contoh berikut hash sandinya, dan itu tidak perlu ikut ke mana-mana.
+/database/sql/*
+!/database/sql/20[0-9][0-9]-[0-9][0-9]-[0-9][0-9]-*.sql
+
+/docs
+/database/seeders
+/reference
+.CHANGESQLENV
+.CHANGEZIP

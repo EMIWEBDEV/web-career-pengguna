@@ -1,0 +1,123 @@
+﻿kode;kode_induk;level;nama;nama_en;nama_fakultas;urutan;sumber
+00;;BROAD;"Program Umum dan Kualifikasi Dasar";"Generic programmes and qualifications";"Program Umum";10;isced
+001;00;NARROW;"Program Dasar dan Kualifikasi";"Basic programmes and qualifications";;20;isced
+0011;001;DETAIL;"Program Dasar dan Kualifikasi";"Basic programmes and qualifications";;30;isced
+002;00;NARROW;"Literasi dan Numerasi";"Literacy and numeracy";;40;isced
+0021;002;DETAIL;"Literasi dan Numerasi";"Literacy and numeracy";;50;isced
+003;00;NARROW;"Keterampilan Diri dan Pengembangan Pribadi";"Personal skills and development";;60;isced
+0031;003;DETAIL;"Keterampilan Diri dan Pengembangan Pribadi";"Personal skills and development";;70;isced
+01;;BROAD;"Pendidikan dan Keguruan";"Education science";"Fakultas Keguruan dan Ilmu Pendidikan";80;isced
+011;01;NARROW;Pendidikan;Education;;90;isced
+0111;011;DETAIL;"Ilmu Pendidikan";"Education science";;100;isced
+0112;011;DETAIL;"Pendidikan Guru PAUD";"Training for pre-school teachers";;110;isced
+0113;011;DETAIL;"Pendidikan Guru tanpa Spesialisasi Mata Pelajaran";"Teacher training without subject specialisation";;120;isced
+0114;011;DETAIL;"Pendidikan Guru dengan Spesialisasi Mata Pelajaran";"Teacher training with subject specialisation";;130;isced
+018;01;NARROW;"Program Lintas Bidang Pendidikan";"Inter-disciplinary programmes and qualifications involving education";;140;isced
+0118;018;DETAIL;"Program Lintas Bidang Pendidikan";"Inter-disciplinary programmes and qualifications involving education";;150;isced
+02;;BROAD;"Seni dan Humaniora";"Arts and humanities";"Fakultas Ilmu Budaya / Seni";160;isced
+021;02;NARROW;Seni;Arts;;170;isced
+0211;021;DETAIL;"Teknik Audio-Visual dan Produksi Media";"Audio-visual techniques and media production";;180;isced
+0212;021;DETAIL;"Desain Mode, Interior, dan Industri";"Fashion, interior and industrial design";;190;isced
+0213;021;DETAIL;"Seni Rupa";"Fine arts";;200;isced
+0214;021;DETAIL;"Kriya dan Kerajinan";Handicrafts;;210;isced
+0215;021;DETAIL;"Musik dan Seni Pertunjukan";"Music and performing arts";;220;isced
+022;02;NARROW;"Humaniora (selain Bahasa)";"Humanities (except languages)";;230;isced
+0221;022;DETAIL;"Agama dan Teologi";"Religion and theology";;240;isced
+0222;022;DETAIL;"Sejarah dan Arkeologi";"History and archaeology";;250;isced
+0223;022;DETAIL;"Filsafat dan Etika";"Philosophy and ethics";;260;isced
+023;02;NARROW;Bahasa;Languages;;270;isced
+0231;023;DETAIL;"Pemerolehan Bahasa";"Language acquisition";;280;isced
+0232;023;DETAIL;"Sastra dan Linguistik";"Literature and linguistics";;290;isced
+03;;BROAD;"Ilmu Sosial, Jurnalistik, dan Informasi";"Social sciences, journalism and information";"Fakultas Ilmu Sosial dan Ilmu Politik";300;isced
+031;03;NARROW;"Ilmu Sosial dan Perilaku";"Social and behavioural sciences";;310;isced
+0311;031;DETAIL;Ekonomi;Economics;;320;isced
+0312;031;DETAIL;"Ilmu Politik dan Kewarganegaraan";"Political sciences and civics";;330;isced
+0313;031;DETAIL;Psikologi;Psychology;;340;isced
+0314;031;DETAIL;"Sosiologi dan Kajian Budaya";"Sociology and cultural studies";;350;isced
+032;03;NARROW;"Jurnalistik dan Informasi";"Journalism and information";;360;isced
+0321;032;DETAIL;"Jurnalistik dan Pemberitaan";"Journalism and reporting";;370;isced
+0322;032;DETAIL;"Perpustakaan, Informasi, dan Kearsipan";"Library, information and archival studies";;380;isced
+04;;BROAD;"Bisnis, Administrasi, dan Hukum";"Business, administration and law";"Fakultas Ekonomi, Bisnis, dan Hukum";390;isced
+041;04;NARROW;"Bisnis dan Administrasi";"Business and administration";;400;isced
+0411;041;DETAIL;"Akuntansi dan Perpajakan";"Accounting and taxation";;410;isced
+0412;041;DETAIL;"Keuangan, Perbankan, dan Asuransi";"Finance, banking and insurance";;420;isced
+0413;041;DETAIL;"Manajemen dan Administrasi";"Management and administration";;430;isced
+0414;041;DETAIL;"Pemasaran dan Periklanan";"Marketing and advertising";;440;isced
+0415;041;DETAIL;"Kesekretariatan dan Administrasi Perkantoran";"Secretarial and office work";;450;isced
+0416;041;DETAIL;"Perdagangan Grosir dan Ritel";"Wholesale and retail sales";;460;isced
+0417;041;DETAIL;"Keterampilan Kerja";"Work skills";;470;isced
+042;04;NARROW;Hukum;Law;;480;isced
+0421;042;DETAIL;Hukum;Law;;490;isced
+05;;BROAD;"Ilmu Alam, Matematika, dan Statistika";"Natural sciences, mathematics and statistics";"Fakultas Matematika dan Ilmu Pengetahuan Alam";500;isced
+051;05;NARROW;"Ilmu Hayati dan Terkait";"Biological and related sciences";;510;isced
+0511;051;DETAIL;Biologi;Biology;;520;isced
+0512;051;DETAIL;Biokimia;Biochemistry;;530;isced
+052;05;NARROW;Lingkungan;Environment;;540;isced
+0521;052;DETAIL;"Ilmu Lingkungan";"Environmental sciences";;550;isced
+0522;052;DETAIL;"Lingkungan Alam dan Satwa Liar";"Natural environments and wildlife";;560;isced
+053;05;NARROW;"Ilmu Fisik";"Physical sciences";;570;isced
+0531;053;DETAIL;Kimia;Chemistry;;580;isced
+0532;053;DETAIL;"Ilmu Kebumian";"Earth sciences";;590;isced
+0533;053;DETAIL;Fisika;Physics;;600;isced
+054;05;NARROW;"Matematika dan Statistika";"Mathematics and statistics";;610;isced
+0541;054;DETAIL;Matematika;Mathematics;;620;isced
+0542;054;DETAIL;Statistika;Statistics;;630;isced
+06;;BROAD;"Teknologi Informasi dan Komunikasi";"Information and Communication Technologies (ICTs)";"Fakultas Ilmu Komputer";640;isced
+061;06;NARROW;"Teknologi Informasi dan Komunikasi";"Information and Communication Technologies (ICTs)";;650;isced
+0611;061;DETAIL;"Penggunaan Komputer";"Computer use";;660;isced
+0612;061;DETAIL;"Perancangan dan Administrasi Basis Data dan Jaringan";"Database and network design and administration";;670;isced
+0613;061;DETAIL;"Pengembangan Perangkat Lunak dan Aplikasi";"Software and applications development and analysis";;680;isced
+07;;BROAD;"Teknik, Manufaktur, dan Konstruksi";"Engineering, manufacturing and construction";"Fakultas Teknik";690;isced
+071;07;NARROW;"Teknik dan Keteknikan";"Engineering and engineering trades";;700;isced
+0711;071;DETAIL;"Teknik Kimia dan Proses";"Chemical engineering and processes";;710;isced
+0712;071;DETAIL;"Teknologi Perlindungan Lingkungan";"Environmental protection technology";;720;isced
+0713;071;DETAIL;"Kelistrikan dan Energi";"Electricity and energy";;730;isced
+0714;071;DETAIL;"Elektronika dan Otomasi";"Electronics and automation";;740;isced
+0715;071;DETAIL;"Mekanika dan Logam";"Mechanics and metal trades";;750;isced
+0716;071;DETAIL;"Kendaraan Bermotor, Kapal, dan Pesawat";"Motor vehicles, ships and aircraft";;760;isced
+072;07;NARROW;"Manufaktur dan Pengolahan";"Manufacturing and processing";;770;isced
+0721;072;DETAIL;"Pengolahan Pangan";"Food processing";;780;isced
+0722;072;DETAIL;"Material (Kaca, Kertas, Plastik, Kayu)";"Materials (glass, paper, plastic and wood)";;790;isced
+0723;072;DETAIL;"Tekstil (Pakaian, Alas Kaki, Kulit)";"Textiles (clothes, footwear and leather)";;800;isced
+0724;072;DETAIL;"Pertambangan dan Ekstraksi";"Mining and extraction";;810;isced
+073;07;NARROW;"Arsitektur dan Konstruksi";"Architecture and construction";;820;isced
+0731;073;DETAIL;"Arsitektur dan Perencanaan Kota";"Architecture and town planning";;830;isced
+0732;073;DETAIL;"Bangunan dan Teknik Sipil";"Building and civil engineering";;840;isced
+08;;BROAD;"Pertanian, Kehutanan, Perikanan, dan Kedokteran Hewan";"Agriculture, forestry, fisheries and veterinary";"Fakultas Pertanian dan Kedokteran Hewan";850;isced
+081;08;NARROW;Pertanian;Agriculture;;860;isced
+0811;081;DETAIL;"Produksi Tanaman dan Ternak";"Crop and livestock production";;870;isced
+0812;081;DETAIL;Hortikultura;Horticulture;;880;isced
+082;08;NARROW;Kehutanan;Forestry;;890;isced
+0821;082;DETAIL;Kehutanan;Forestry;;900;isced
+083;08;NARROW;Perikanan;Fisheries;;910;isced
+0831;083;DETAIL;Perikanan;Fisheries;;920;isced
+084;08;NARROW;"Kedokteran Hewan";Veterinary;;930;isced
+0841;084;DETAIL;"Kedokteran Hewan";Veterinary;;940;isced
+09;;BROAD;"Kesehatan dan Kesejahteraan";"Health and welfare";"Fakultas Kedokteran dan Ilmu Kesehatan";950;isced
+091;09;NARROW;Kesehatan;Health;;960;isced
+0911;091;DETAIL;"Kedokteran Gigi";"Dental studies";;970;isced
+0912;091;DETAIL;Kedokteran;Medicine;;980;isced
+0913;091;DETAIL;"Keperawatan dan Kebidanan";"Nursing and midwifery";;990;isced
+0914;091;DETAIL;"Teknologi Diagnostik dan Terapi Medis";"Medical diagnostic and treatment technology";;1000;isced
+0915;091;DETAIL;"Terapi dan Rehabilitasi";"Therapy and rehabilitation";;1010;isced
+0916;091;DETAIL;Farmasi;Pharmacy;;1020;isced
+0917;091;DETAIL;"Pengobatan Tradisional dan Komplementer";"Traditional and complementary medicine and therapy";;1030;isced
+092;09;NARROW;"Kesejahteraan Sosial";Welfare;;1040;isced
+0921;092;DETAIL;"Perawatan Lansia dan Penyandang Disabilitas";"Care of the elderly and of disabled adults";;1050;isced
+0922;092;DETAIL;"Perawatan Anak dan Layanan Remaja";"Child care and youth services";;1060;isced
+0923;092;DETAIL;"Pekerjaan Sosial dan Konseling";"Social work and counselling";;1070;isced
+10;;BROAD;"Jasa dan Layanan";Services;"Fakultas Vokasi dan Layanan";1080;isced
+101;10;NARROW;"Layanan Personal";"Personal services";;1090;isced
+1011;101;DETAIL;"Layanan Rumah Tangga";"Domestic services";;1100;isced
+1012;101;DETAIL;"Tata Rambut dan Kecantikan";"Hair and beauty services";;1110;isced
+1013;101;DETAIL;"Perhotelan, Restoran, dan Jasa Boga";"Hotel, restaurants and catering";;1120;isced
+1014;101;DETAIL;Olahraga;Sports;;1130;isced
+1015;101;DETAIL;"Perjalanan, Pariwisata, dan Rekreasi";"Travel, tourism and leisure";;1140;isced
+102;10;NARROW;"Sanitasi dan Kesehatan Kerja";"Hygiene and occupational health services";;1150;isced
+1021;102;DETAIL;"Sanitasi Lingkungan";"Community sanitation";;1160;isced
+1022;102;DETAIL;"Keselamatan dan Kesehatan Kerja (K3)";"Occupational health and safety";;1170;isced
+103;10;NARROW;"Layanan Keamanan";"Security services";;1180;isced
+1031;103;DETAIL;"Militer dan Pertahanan";"Military and defence";;1190;isced
+1032;103;DETAIL;"Perlindungan Orang dan Properti";"Protection of persons and property";;1200;isced
+104;10;NARROW;"Layanan Transportasi";"Transport services";;1210;isced
+1041;104;DETAIL;"Layanan Transportasi";"Transport services";;1220;isced

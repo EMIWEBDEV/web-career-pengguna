@@ -1,0 +1,103 @@
+# KATA TAMBAHAN — dianggap kata sungguhan di samping kamus id_ID & en_US.
+#
+# Dibaca DUA pihak: pemeriksa ejaan di peramban (utils/career/ejaanWorker.js,
+# nspell) dan server (App\Support\Career\Kamus). Satu kata per baris, huruf
+# kecil, tanpa spasi. Baris berawalan # diabaikan.
+#
+# Isinya singkatan & ragam tulis santai yang lazim dipakai kandidat, plus
+# istilah kerja yang belum ada di kedua kamus. `npm run kamus` memberi tahu
+# kata di sini yang ternyata SUDAH dikenal kamus (boleh dibuang).
+
+# kata ganti
+sy
+sya
+aq
+gw
+kmu
+kmi
+
+# ingkar
+gak
+nggak
+ngga
+engga
+nggk
+tdk
+blm
+gausah
+gpp
+gapapa
+
+# kata sambung & keterangan (singkatan)
+dgn
+karna
+krna
+utk
+untk
+tpi
+jdi
+jgn
+trs
+trus
+dlm
+klo
+agr
+sblm
+stlh
+sdh
+udh
+udah
+sdg
+lgi
+aj
+bgt
+bnyk
+emg
+mmg
+gimana
+gmn
+knp
+ttg
+dll
+dsb
+kyk
+ntar
+nnti
+skrg
+skrng
+kmrn
+tetep
+bener
+
+# kata kerja & benda (ragam santai)
+dapet
+dapetin
+ngurus
+ngurusin
+nyari
+pengen
+pingin
+kepengen
+lanjutin
+ngelanjutin
+ngelamar
+kerjain
+ngerjain
+ortu
+kluarga
+ngekos
+kost
+makasih
+mksh
+thx
+
+# istilah kerja & pendidikan
+wfh
+wfo
+hrd
+fulltime
+parttime
+jobdesk
+jobdesc
+koas
+ppds

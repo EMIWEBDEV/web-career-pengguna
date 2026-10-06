@@ -1,0 +1,78 @@
+table_query.sql
+.gitignore
+.dockerignore
+# Dependencies (install inside container)
+/node_modules
+/vendor
+
+# Build artifacts and local server files
+/public/build
+/public/hot
+
+# Storage symlink
+/public/storage
+
+# Ignore local application storage contents
+/storage/framework/cache/data/*
+/storage/framework/sessions/*
+/storage/framework/views/*
+/storage/logs/*.log
+/storage/*.key
+!/storage/.gitignore
+
+# .dockerignore TIDAK mengenal komentar di ujung baris — seluruh baris dibaca
+# sebagai pola. Baris ini dulu berbunyi:
+#     /bootstrap/cache/*.php  # <-- TAMBAHKAN BARIS INI
+# sehingga yang dicari Docker adalah berkas bernama persis begitu, dan cache
+# konfigurasi dari mesin lokal tetap bisa ikut terbawa ke dalam image — berikut
+# kredensial basis data lokal yang sempat ter-cache di dalamnya.
+/bootstrap/cache/*.php
+
+# Deployment and Docker specific
+/deploy/docker-compose.yml
+/deploy/Dockerfile
+.dockerignore
+
+# Environment files (HIGHLY IMPORTANT)
+.env
+# .env.example JANGAN di-ignore agar bisa dipakai saat build
+
+# Local development config
+Homestead.json
+Homestead.yaml
+
+# Caching and log files
+.phpunit.cache
+.phpunit.result.cache
+npm-debug.log
+yarn-error.log
+
+# Credentials
+auth.json
+
+# IDE and OS specific
+/.fleet
+/.idea
+/.vscode
+.DS_Store
+
+# Git
+.git
+.gitignore
+
+table_query.sql
+.gitignore
+.dockerignore
+.claude/settings.local.json
+.claude
+.CLAUDE.md
+akses structure.sql
+hcis-kpi-groupedV1.1.1.zip
+table_structure_2.sql
+table_structure.sql
+.dockerignore
+.gitignore
+docs/
+.claude
+.CHANGESQLENV
+.CHANGEZIP
