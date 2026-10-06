@@ -48,13 +48,15 @@ class SeoPublikController extends Controller
         'PetalBot', 'BLEXBot', 'DataForSeoBot', 'ZoominfoBot',
     ];
 
-    /** Jalur yang tidak pernah pantas muncul di hasil pencarian. */
+    /**
+     * Jalur yang tidak pernah pantas muncul di hasil pencarian: halaman
+     * berakun, formulir, dan tautan bertanda tangan milik satu kandidat.
+     */
     private const TERTUTUP = [
-        '/karir/pelamar', '/karir/program-kegiatan', '/karir/pembukaan',
-        '/karir/penjadwalan', '/karir/monitoring', '/karir/pengumuman',
-        '/karir/kandidat', '/karir/talent-pool', '/karir/feedback-dashboard',
-        '/kandidat/', '/profil', '/master-', '/hak-akses', '/klasifikasi-akses',
-        '/api/', '/login', '/register', '/ganti-sandi', '/logout',
+        '/kandidat/', '/profil', '/api/', '/login', '/register', '/logout',
+        '/ganti-sandi', '/menunggu-verifikasi', '/verifikasi-email',
+        '/karir/login', '/karir/register', '/karir/apply/',
+        '/karir/konfirmasi/', '/karir/surat-jadwal/', '/feedback/',
     ];
 
     public function robots(Request $request)

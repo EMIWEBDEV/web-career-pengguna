@@ -31,20 +31,12 @@ return [
     ],
 
     /*
-    | Props global tambahan — pengait supaya fitur baru TIDAK perlu menyunting
-    | PropsShell. Isi dengan nama kelas yang punya method statik:
-    |
-    |     public static function tambahan(string $url, string $judul): array
-    |
-    | Hasilnya digabung ke props setiap halaman admin. Tambah di BARIS BARU di
-    | akhir daftar supaya git bisa menggabungkannya sendiri saat merge.
+    | Props global tambahan untuk setiap halaman portal — kelas dengan method
+    | statik `tambahan(string $url, string $judul): array`. PropsSeo menyalin
+    | judul halaman ke <title> yang dicetak server, supaya judul tab tidak
+    | berkedip dari bawaan ke judul aslinya saat Vue selesai dimuat.
     */
     'props_tambahan' => [
-        // App\Support\Career\Shell\Tambahan\ContohProps::class,
-
-        // Menyalin judul modul ke <title> yang dicetak server, supaya judul
-        // tab halaman admin tidak berkedip dari default ke judul aslinya saat
-        // Vue selesai dimuat. Lihat App\Support\Seo\PropsSeo.
         App\Support\Seo\PropsSeo::class,
     ],
 

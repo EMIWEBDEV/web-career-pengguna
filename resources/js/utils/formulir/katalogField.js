@@ -248,14 +248,6 @@ export const KATALOG_FIELD = {
 
 export const TIPE_VALID = new Set(Object.keys(KATALOG_FIELD));
 
-export function daftarTipe() {
-    return Object.entries(KATALOG_FIELD).map(([value, def]) => ({
-        value,
-        label: def.label,
-        ikon: def.ikon,
-    }));
-}
-
 export function propertiTipe(tipe) {
     return KATALOG_FIELD[tipe]?.properti || [];
 }

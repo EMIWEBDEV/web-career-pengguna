@@ -3,10 +3,9 @@
 namespace Tests\Feature\Controllers\Auth;
 
 use App\Http\Middleware\VerifyCsrfToken;
-use App\Jobs\Career\WcSyncEmailJob;
+use App\Support\Sinkron\Outbox;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
@@ -18,8 +17,9 @@ use Tests\TestCase;
  * Mengikuti house-style HomepageControllerTest: SQLite in-memory yang dibuat di
  * setUp(), user dibangun manual (tabel N_WEB_CAREERS_Users dikelola eksternal
  * sehingga UserFactory tidak dipakai). CSRF dimatikan tapi StartSession tetap
- * jalan (controller memakai $request->session()). Job di-fake — dispatch cukup
- * diverifikasi tanpa menjalankan handle().
+ * jalan (controller memakai $request->session()). Surel tidak dikirim dari
+ * sini: yang diperiksa adalah peristiwa Outbox (mode palsu) yang meminta zona
+ * dalam mengirimnya.
  */
 class ResetOtpTest extends TestCase
 {
@@ -37,14 +37,20 @@ class ResetOtpTest extends TestCase
         // Route reset ada di grup web → matikan HANYA CSRF, biarkan StartSession
         // hidup agar $request->session() tersedia di controller.
         $this->withoutMiddleware(VerifyCsrfToken::class);
-        Bus::fake();
+        Outbox::palsukan();
+        config(['sinkron.kunci_rahasia' => 'base64:'.base64_encode(random_bytes(32))]);
 
         Schema::create('N_WEB_CAREERS_Users', function (Blueprint $table) {
             $table->increments('Id_Users');
             $table->string('Nama')->nullable();
             $table->string('Email')->nullable();
+            $table->string('No_Hp')->nullable();
+            $table->string('NIK')->nullable();
             $table->string('Password')->nullable();
+            $table->string('Role')->nullable();
+            $table->string('Klasifikasi')->nullable();
             $table->string('Status')->nullable();
+            $table->date('Mulai_Berlaku')->nullable();
             $table->string('Flag_Email_Verified')->nullable();
             $table->dateTime('Valid_Until')->nullable();
             $table->string('Reset_Otp_Hash', 64)->nullable();
@@ -189,7 +195,10 @@ class ResetOtpTest extends TestCase
         $this->assertNull($row->Reset_Otp_Hash, 'OTP harus dihapus setelah sukses (sekali pakai).');
         $this->assertNotNull($row->Pwd_Changed_At, 'Pwd_Changed_At harus di-set untuk invalidasi sesi.');
 
-        Bus::assertDispatched(WcSyncEmailJob::class); // notifikasi RESET_SELESAI
+        // Zona dalam diminta mengirim pemberitahuan "kata sandi diganti".
+        $kabar = Outbox::tercatat(Outbox::AKUN_DIPERBARUI);
+        $this->assertCount(1, $kabar);
+        $this->assertSame(['sandi_diganti'], $kabar[0]['muatan']['perubahan']);
         $this->assertDatabaseHas('N_WEB_CAREERS_Reset_Audit', ['Event' => 'SUCCESS', 'Id_Users' => $this->userId]);
     }
 
@@ -207,7 +216,12 @@ class ResetOtpTest extends TestCase
         );
 
         // OTP hanya di-dispatch untuk email yang terdaftar (sekali).
-        Bus::assertDispatchedTimes(WcSyncEmailJob::class, 1);
+        // Hanya email terdaftar yang memicu permintaan kode — kodenya terbungkus.
+        $minta = Outbox::tercatat(Outbox::AKUN_KODE_DIMINTA);
+        $this->assertCount(1, $minta);
+        $this->assertSame('RESET', $minta[0]['muatan']['jenis']);
+        $this->assertArrayNotHasKey('otp', $minta[0]['muatan']);
+        $this->assertNotEmpty($minta[0]['muatan']['rahasia']);
         $this->assertDatabaseHas('N_WEB_CAREERS_Reset_Audit', ['Event' => 'REQUEST', 'Id_Users' => $this->userId]);
         $this->assertDatabaseHas('N_WEB_CAREERS_Reset_Audit', ['Event' => 'REQUEST', 'Email' => 'entah@contoh.test']);
     }
@@ -261,7 +275,7 @@ class ResetOtpTest extends TestCase
 
         $this->postJson('/api/v1/lupa-sandi', ['email' => 'kandidat@contoh.test'])->assertOk();
 
-        Bus::assertNotDispatched(WcSyncEmailJob::class); // cooldown → tidak kirim
+        $this->assertCount(0, Outbox::tercatat(Outbox::AKUN_KODE_DIMINTA)); // cooldown → tidak kirim
         $this->assertDatabaseHas('N_WEB_CAREERS_Reset_Audit', ['Event' => 'REQUEST', 'Keterangan' => 'cooldown']);
     }
 
@@ -277,7 +291,7 @@ class ResetOtpTest extends TestCase
 
         $this->postJson('/api/v1/lupa-sandi', ['email' => 'kandidat@contoh.test'])->assertOk();
 
-        Bus::assertDispatched(WcSyncEmailJob::class); // tidak kena cooldown → kirim
+        $this->assertCount(1, Outbox::tercatat(Outbox::AKUN_KODE_DIMINTA)); // tidak kena cooldown → kirim
         $row = DB::table('N_WEB_CAREERS_Users')->where('Id_Users', $this->userId)->first();
         $this->assertNotNull($row->Reset_Otp_Hash, 'OTP baru harus dibuat.');
     }

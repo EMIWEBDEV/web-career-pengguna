@@ -3,7 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Career\AksesService;
-use App\Support\CareerShell;
+use App\Support\Career\Shell\IdentitasShell;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -40,11 +40,9 @@ class CareerPermission
         }
 
         // ── MODE PEMELIHARAAN (N_WEB_CAREERS_Menu.Flag_Maintenance = 'Y') ──
-        // Ditutup untuk semua orang KECUALI SUPERADMIN — jalan keluar supaya
-        // admin tetap bisa mematikan flag-nya kembali walau menu pengaturnya
-        // ikut ditandai maintenance.
+        // Flag-nya diatur dari zona dalam (salinan Master Menu).
         $maint = AksesService::menuMaintenance($jenisPage);
-        if ($maint && ($auth['role'] ?? null) !== 'SUPERADMIN') {
+        if ($maint) {
             return $this->pemeliharaan($request, $maint);
         }
 
@@ -61,35 +59,22 @@ class CareerPermission
         return $next($request);
     }
 
-    /**
-     * Halaman pemeliharaan. Dua varian — inilah pemisah "standalone vs tidak":
-     *  - Menu ADMIN  → dirender DI DALAM shell (navbar + sidebar tetap ada),
-     *    sehingga admin bisa langsung pindah ke menu lain.
-     *  - Menu KANDIDAT / publik → halaman STANDALONE penuh layar.
-     */
+    /** Halaman pemeliharaan — standalone penuh layar. */
     private function pemeliharaan(Request $request, object $menu): Response
     {
-        $pesan = 'Menu "' . $menu->Nama_Menu . '" sedang dalam pemeliharaan. Silakan kembali beberapa saat lagi.';
+        $pesan = 'Menu "'.$menu->Nama_Menu.'" sedang dalam pemeliharaan. Silakan kembali beberapa saat lagi.';
 
         if ($request->expectsJson() || $request->is('api/*')) {
             return response()->json(['success' => false, 'status' => 503, 'message' => $pesan], 503);
         }
 
-        $props = [
+        return Inertia::render('Error', [
             'status' => 503,
             'message' => $pesan,
             'maintenanceMenu' => $menu->Nama_Menu,
             'tanggal' => now()->translatedFormat('l, d F Y'),
-            'homeUrl' => CareerRole::beranda(session('career_auth.role')),
-        ];
-
-        if (($menu->Untuk_Role ?? 'ADMIN') === 'ADMIN') {
-            // Dalam shell: bawa props layout supaya sidebar & topbar ikut tampil.
-            return Inertia::render('ErrorShell', CareerShell::props($request->path(), 'Mode Pemeliharaan', $props))
-                ->toResponse($request)->setStatusCode(503);
-        }
-
-        return Inertia::render('Error', $props)->toResponse($request)->setStatusCode(503);
+            'homeUrl' => IdentitasShell::beranda(),
+        ])->toResponse($request)->setStatusCode(503);
     }
 
     private function tolak(Request $request, string $pesan, int $status): Response

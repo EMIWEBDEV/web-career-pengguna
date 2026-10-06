@@ -9,7 +9,7 @@
     "license": "MIT",
     "require": {
         "php": "^8.1",
-        "barryvdh/laravel-dompdf": "^3.1",
+        "google/auth": "^1.47",
         "google/cloud-tasks": "^2.0",
         "guzzlehttp/guzzle": "^7.2",
         "inertiajs/inertia-laravel": "^2.0",
@@ -17,15 +17,7 @@
         "laravel/sanctum": "^3.3",
         "laravel/tinker": "^2.8",
         "league/flysystem-google-cloud-storage": "^3.30",
-        "opcodesio/log-viewer": "^3.17",
-        "phpoffice/phpspreadsheet": "^5.4",
-        "realrashid/sweet-alert": "^7.2",
-        "resend/resend-laravel": "*",
-        "setasign/fpdf": "^1.8",
-        "setasign/fpdi": "^2.6",
-        "smalot/pdfparser": "^2.12",
         "spatie/laravel-google-cloud-storage": "^2.3",
-        "spatie/pdf-to-image": "^3.2",
         "stackkit/laravel-google-cloud-tasks-queue": "^4.0",
         "vinkla/hashids": "^11.0"
     },
@@ -40,9 +32,7 @@
     },
     "autoload": {
         "psr-4": {
-            "App\\": "app/",
-            "Database\\Factories\\": "database/factories/",
-            "Database\\Seeders\\": "database/seeders/"
+            "App\\": "app/"
         },
         "files": [
             "app/Helpers/ResponseHelper.php"
@@ -81,7 +71,6 @@
         "preferred-install": "dist",
         "sort-packages": true,
         "allow-plugins": {
-            "pestphp/pest-plugin": true,
             "php-http/discovery": true
         }
     },

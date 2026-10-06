@@ -1,67 +1,59 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Web Careers — Pengguna (zona publik)
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Situs karier EVO Group untuk **kandidat**: landing page & lowongan, daftar/masuk,
+melamar, portal lamaran (tahapan, formulir, unggah berkas tes, konfirmasi
+kehadiran, surat jadwal), dan feedback. Panel admin hidup di repo terpisah
+(`web-careers`) dan tidak pernah dijangkau langsung oleh project ini.
 
-## About Laravel
+## Aturan zona
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+| Boleh | Tidak boleh |
+|---|---|
+| Database publik (`DB_DATABASE`, mis. `emi_tm_demo`) | Kredensial/database admin (`Web_HRIS`) — aplikasi menolak menyala bila ada koneksi ke database di `DB_ADMIN_TERLARANG` |
+| Menulis tabel **milik** publik + `Sinkron_Outbox` (lewat `usp_PUB_Outbox_Tulis`) | Menulis tabel **salinan** dari admin |
+| Menulis bucket **karantina**, membaca bucket **publik** | Bucket admin |
+| Menerbitkan peristiwa ke Pub/Sub `wc-masuk` | Memanggil API admin, CAT/HCLearn, HCIS, atau EVO Mail |
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+Aksi kandidat yang perlu diproses admin dicatat sebagai **peristiwa Outbox** di
+transaksi yang sama dengan datanya (`App\Support\Sinkron\Outbox`), lalu
+diterbitkan ke Pub/Sub oleh `App\Jobs\TerbitkanOutbox` (queue `wcp-terbit`) atau
+penyapu `POST /api/tugas/terbit-outbox` (Cloud Scheduler, header `X-Tugas-Token`).
+Jenis peristiwa: `Akun.Terdaftar`, `Akun.Diperbarui`, `Akun.KodeDiminta`,
+`Lamaran.Dikirim`, `Lamaran.Dibatalkan`, `Formulir.Dikirim`, `Berkas.Diunggah`,
+`Konfirmasi.Dijawab`, `Konfirmasi.Dicabut`, `Feedback.Dikirim`.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Portal membaca **potret** per lamaran (`N_WEB_CAREERS_Pub_Portal_Lamaran`, kontrak 1)
+yang diisi Sync Worker admin; bagian yang bergantung waktu dihitung ulang saat
+dibaca (`App\Support\Portal\PenilaiWaktu`). Selama potret belum datang, portal
+menampilkan "sedang diproses".
 
-## Learning Laravel
+## Menjalankan lokal
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+composer install
+npm ci
+npm run dev        # atau: npm run build
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+Kunci `.env` yang wajib selain bawaan Laravel: `DB_*` (database publik),
+`GCS_BUCKET_KARANTINA`, `GCS_BUCKET_PUBLIK`, `PUBSUB_TOPIK`, `TAUTAN_KUNCI` dan
+`SINKRON_KUNCI_RAHASIA` (keduanya **sama dengan admin**), `TUGAS_TOKEN` (milik
+project ini sendiri), dan `APP_KEY` sendiri (**berbeda dari admin**).
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Pengujian
 
-## Laravel Sponsors
+```bash
+DB_CONNECTION=sqlite DB_DATABASE=":memory:" php vendor/bin/phpunit
+```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+Pengujian tidak menyentuh database sungguhan: tabel dibuat di SQLite memori dan
+Outbox memakai mode palsu (`Outbox::palsukan()`).
 
-### Premium Partners
+## Deploy (Cloud Run)
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
-
-## License
-
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
-"# kpi-fix" 
+`Dockerfile` membangun image dari `.env.example` sebagai cadangan; nilai
+sebenarnya datang dari variabel lingkungan service. Yang perlu disiapkan:
+`QUEUE_CONNECTION=cloudtasks`, `CLOUD_TASKS_*` (queue `wcp-terbit`,
+`CLOUD_TASKS_HANDLER_URL` = URL service ini + `/handle-task`), login database
+`app_publik` / `penerbit_publik`, akun layanan khusus pengguna, dan job Cloud
+Scheduler untuk penyapu Outbox.

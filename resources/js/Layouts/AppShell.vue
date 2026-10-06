@@ -9,9 +9,6 @@
                 <slot />
             </main>
         </div>
-
-        <!-- [feat/feedback] Export notification widget (admin only) -->
-        <ExportNotificationToast v-if="isAdmin" />
     </div>
 </template>
 
@@ -20,7 +17,6 @@ import { computed, watch } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import AppSidebar from '../components/Shell/AppSidebar.vue';
 import AppTopbar from '../components/Shell/AppTopbar.vue';
-import ExportNotificationToast from '../components/ExportNotificationToast.vue';
 import { useShellState } from '../composables/useShellState';
 
 const shell = useShellState();
@@ -30,13 +26,6 @@ const user = computed(() => page.props.auth?.user || {});
 const layout = computed(() => page.props.layout || {});
 const brand = computed(() => layout.value.brand || {});
 const navigation = computed(() => layout.value.navigation || { home: null, modules: [] });
-
-// [feat/feedback] Export notification hanya untuk admin
-const careerAuth = computed(() => page.props.careerAuth);
-const isAdmin = computed(() => {
-    const role = careerAuth.value?.role;
-    return role === 'ADMIN' || role === 'SUPERADMIN';
-});
 
 watch(
     () => layout.value.shell,

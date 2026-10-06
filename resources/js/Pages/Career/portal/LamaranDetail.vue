@@ -85,6 +85,17 @@
                 Lamaran Saya
             </Link>
 
+            <!-- Lamaran sudah tercatat, tapi tim rekrutmen belum memprosesnya
+                 (potret portal belum tersedia) — jangan tampilkan tahapan kosong
+                 seolah tidak ada apa-apa. -->
+            <div v-if="lamaran.menungguPotret" class="ld-proses" role="status">
+                <i class="bi bi-hourglass-split"></i>
+                <div>
+                    <strong>Lamaranmu sudah kami terima dan sedang diproses.</strong>
+                    <span>Tahapan seleksi, jadwal, dan formulir lanjutan akan tampil di sini begitu tim rekrutmen memprosesnya — biasanya hanya beberapa saat.</span>
+                </div>
+            </div>
+
             <!-- ═══ HERO HEADER ═══ -->
             <div class="ld-hero">
                 <span class="ld-hero__bar"></span>
@@ -7016,5 +7027,29 @@ TQVA5K0T) — ia dibaca
         align-items: flex-start;
     }
     .ld-toast .bi { flex: none; margin-top: 1px; }
+}
+.ld-proses {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    margin: 0 0 1rem;
+    padding: 0.95rem 1.1rem;
+    border-radius: 14px;
+    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: rgba(99, 102, 241, 0.07);
+    color: #3730a3;
+}
+.ld-proses i {
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+.ld-proses div {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    font-size: 0.9rem;
+}
+.ld-proses span {
+    color: #4b5563;
 }
 </style>

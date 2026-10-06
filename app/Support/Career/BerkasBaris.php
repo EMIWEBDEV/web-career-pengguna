@@ -26,39 +26,6 @@ class BerkasBaris
     public const FORMAT_LABEL = '{label} #{nomor}';
 
     /**
-     * Kunci komposit sebuah berkas.
-     *
-     * Bagian TANPA baris (atau sebaliknya) sengaja jatuh ke `field` saja: itu
-     * bukan identitas berulang yang sah, dan membentuk kunci setengah jadi hanya
-     * memindahkan kesalahannya ke tempat yang lebih sulit dilacak.
-     */
-    public static function kunci(?string $bagian, ?int $baris, string $field): string
-    {
-        if ($bagian === null || $bagian === '' || $baris === null) {
-            return $field;
-        }
-
-        return strtr(self::FORMAT_KUNCI, [
-            '{bagian}' => $bagian,
-            '{baris}' => (string) $baris,
-            '{field}' => $field,
-        ]);
-    }
-
-    /** Label bernomor untuk tampilan. Nomornya berbasis 1 — yang dibaca manusia. */
-    public static function label(string $label, ?int $baris): string
-    {
-        if ($baris === null) {
-            return $label;
-        }
-
-        return strtr(self::FORMAT_LABEL, [
-            '{label}' => $label,
-            '{nomor}' => (string) ($baris + 1),
-        ]);
-    }
-
-    /**
      * Kunci sebuah BAGIAN, persis seperti yang dihitung browser.
      *
      * Cerminan dari kunciBagian() di utils/formulir/aturan.js. Editor tidak pernah

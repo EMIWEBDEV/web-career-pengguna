@@ -51,7 +51,6 @@ import Form1 from './template-1/form-1/Form1.vue';
 import Form2 from './template-1/form-2/Form2.vue';
 import Form3 from './template-1/form-3/Form3.vue';
 import Form4 from './template-1/form-4/Form4.vue';
-import DynamicForm from './DynamicForm.vue';
 import { SKEMA as SKEMA_FORM_1 } from '@utils/formulir/template-1/form-1';
 import { SKEMA as SKEMA_FORM_2 } from '@utils/formulir/template-1/form-2';
 import { SKEMA as SKEMA_FORM_3 } from '@utils/formulir/template-1/form-3';
@@ -105,20 +104,6 @@ export function komponenFormulir(kode) {
 
 export function skemaFormulir(kode) {
     return FORMULIR[kode]?.skema || { langkah: [] };
-}
-
-export function infoFormulir(kode) {
-    return FORMULIR[kode] || null;
-}
-
-export function komponenDinamis() {
-    return DynamicForm;
-}
-
-export function skemaDariFormulir(formulir) {
-    if (formulir?.schema) return formulir.schema;
-    if (formulir?.schemaJson) return formulir.schemaJson;
-    return skemaFormulir(formulir?.komponen);
 }
 
 /**
@@ -295,20 +280,6 @@ export function grupBagian(sumber) {
     });
 
     return peta;
-}
-
-/** Daftar untuk dropdown admin. */
-export function daftarFormulir() {
-    return Object.entries(FORMULIR).map(([kode, f]) => ({
-        kode,
-        nama: f.nama,
-        keterangan: f.keterangan,
-        template: f.template,
-        layout: f.layout,
-        berkas: f.berkas,
-        jumlahLangkah: (f.skema.langkah || []).length,
-        jumlahField: semuaField(f.skema).length,
-    }));
 }
 
 // Diteruskan dari inti/ supaya pemakai cukup mengimpor dari satu tempat.

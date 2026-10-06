@@ -7,36 +7,6 @@ use PHPUnit\Framework\TestCase;
 
 class BerkasBarisTest extends TestCase
 {
-    public function test_kunci_berkas_biasa_hanya_field(): void
-    {
-        $this->assertSame('dok_cv', BerkasBaris::kunci(null, null, 'dok_cv'));
-    }
-
-    public function test_kunci_berkas_berulang_membawa_bagian_dan_baris(): void
-    {
-        $this->assertSame(
-            'riwayat_sertifikasi[2].sert_file',
-            BerkasBaris::kunci('riwayat_sertifikasi', 2, 'sert_file'),
-        );
-    }
-
-    /** Bagian tanpa baris (atau sebaliknya) bukan identitas berulang yang sah. */
-    public function test_kunci_jatuh_ke_field_bila_salah_satu_kosong(): void
-    {
-        $this->assertSame('sert_file', BerkasBaris::kunci('riwayat_sertifikasi', null, 'sert_file'));
-        $this->assertSame('sert_file', BerkasBaris::kunci(null, 2, 'sert_file'));
-    }
-
-    public function test_label_bernomor_mulai_dari_satu(): void
-    {
-        $this->assertSame('Sertifikat #1', BerkasBaris::label('Sertifikat', 0));
-        $this->assertSame('Sertifikat #3', BerkasBaris::label('Sertifikat', 2));
-    }
-
-    public function test_label_berkas_biasa_tidak_bernomor(): void
-    {
-        $this->assertSame('Curriculum Vitae', BerkasBaris::label('Curriculum Vitae', null));
-    }
 
     /**
      * Draf yang dibuat SEBELUM perubahan ini berbentuk peta berkunci field.

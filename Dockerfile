@@ -25,15 +25,13 @@ FROM php:8.3-apache
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies & PHP extensions
-# - poppler-utils: pdftoppm (render PDF->image cepat, untuk secure PDF viewer)
-# - ghostscript: dibutuhkan Imagick untuk membaca PDF (watermark) — TANPA ini render PDF sangat lambat
+# Install system dependencies & PHP extensions.
+# Portal kandidat tidak mengolah PDF/gambar di server (tanpa Imagick, Ghostscript,
+# poppler, GD) dan hanya memakai SQL Server — paketnya sengaja sesedikit mungkin.
 RUN apt-get update && apt-get install -y \
-    git curl libpng-dev libonig-dev libxml2-dev zip unzip libzip-dev gnupg2 \
-    libmagickwand-dev imagemagick ghostscript poppler-utils \
-    fonts-dejavu-core \
+    git curl libonig-dev libxml2-dev zip unzip libzip-dev gnupg2 \
     && rm -rf /var/lib/apt/lists/* \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd xml zip
+    && docker-php-ext-install mbstring xml zip
 
 # Install Composer (Tidak ada perubahan)
 # COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -47,25 +45,17 @@ RUN curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor
     && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/microsoft.gpg] https://packages.microsoft.com/debian/11/prod bullseye main" > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
     && ACCEPT_EULA=Y apt-get install -y msodbcsql18 mssql-tools18 unixodbc-dev \
-    && pecl install sqlsrv pdo_sqlsrv imagick \
-    && docker-php-ext-enable sqlsrv pdo_sqlsrv imagick \
+    && pecl install sqlsrv pdo_sqlsrv \
+    && docker-php-ext-enable sqlsrv pdo_sqlsrv \
     && rm -rf /var/lib/apt/lists/*
-
-# ImageMagick policy default MEMBLOKIR PDF (CVE Ghostscript). Aktifkan kembali
-# agar Imagick bisa membaca/menulis PDF untuk proses watermark.
-RUN set -eux; \
-    for f in /etc/ImageMagick-6/policy.xml /etc/ImageMagick-7/policy.xml; do \
-        if [ -f "$f" ]; then \
-            sed -ri 's!<policy domain="coder" rights="none" pattern="PDF" ?/>!<policy domain="coder" rights="read|write" pattern="PDF" />!g' "$f"; \
-        fi; \
-    done
 
 # Set working directory
 WORKDIR /var/www/html
 
-# Salin file composer dan install dependencies tanpa menjalankan skrip
+# Salin file composer dan install dependencies tanpa menjalankan skrip.
+# --no-dev: phpunit, faker, mockery, ignition dkk. tidak ikut ke image produksi.
 COPY composer.json composer.lock ./
-RUN composer install --no-interaction --no-scripts --optimize-autoloader
+RUN composer install --no-interaction --no-scripts --no-dev --optimize-autoloader
 
 # Salin semua file aplikasi
 COPY . .

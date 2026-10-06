@@ -7,37 +7,14 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * WEB CAREERS — DATA HALAMAN /profil untuk SEMUA peran.
+ * WEB CAREERS — DATA HALAMAN /profil kandidat.
  *
- * ── KENAPA BERKAS INI ADA ────────────────────────────────────────────────
- *
- * Halaman /profil dulu diberi makan CareerShell::adminUser(), yaitu identitas
- * SHELL: name / username / nik / department. Bentuk itu memang benar untuk
- * footer sidebar, tapi layar profil membaca kunci lain sama sekali (nama,
- * email, no_hp, klasifikasi, valid_until, last_login_at ...). Tidak satu pun
- * cocok, jadi seluruh isi kartunya kosong tanpa pernah memunculkan galat —
- * kegagalan diam yang paling mahal untuk ditemukan.
- *
- * Identitas shell juga tidak akan pernah cukup: sesi hanya membawa segelintir
- * kolom yang dibutuhkan gerbang akses (id, nama, email, role, klasifikasi,
- * valid_until). Nomor HP, status verifikasi email, tanggal daftar, dan waktu
- * login terakhir tidak ada di sana — dan kolom-kolom itulah isi halaman ini.
- * Karena itu profil dibaca ULANG dari DB, bukan disalin dari sesi: sekalian
- * membuat perubahan yang dilakukan admin di Master Akun langsung terlihat
- * pemiliknya tanpa harus login ulang.
- *
- * Satu halaman untuk kandidat, admin, dan superadmin. Yang berbeda hanya
- * ringkasannya: kandidat dapat ringkasan LAMARAN, admin dapat ringkasan
- * AKSES — bukan ringkasan lamaran kosong yang tidak pernah bisa terisi.
+ * Dibaca ULANG dari tabel akun setiap halaman dibuka, bukan disalin dari sesi:
+ * sesi hanya membawa kolom untuk gerbang akses, sedangkan nomor HP, status
+ * verifikasi, tanggal daftar, dan login terakhir adalah isi halaman ini.
  */
 class ProfilPengguna
 {
-    /**
-     * Perusahaan yang dilayani modul Web Careers — Karyawan berkunci komposit
-     * (Kode_Perusahaan + Kode_Karyawan). Nilainya sama dengan MasterAkun.
-     */
-    private const KODE_PERUSAHAAN = '001';
-
     /** Status lamaran yang dihitung sebagai "selesai" pada ringkasan kandidat. */
     private const STATUS_SELESAI = ['LULUS', 'GUGUR', 'MUNDUR'];
 
@@ -60,7 +37,6 @@ class ProfilPengguna
         }
 
         $role = strtoupper((string) ($u->Role ?: 'KANDIDAT'));
-        $adminis = in_array($role, IdentitasShell::PERAN_ADMIN, true);
 
         return [
             // ── IDENTITAS ────────────────────────────────────────────────
@@ -68,10 +44,8 @@ class ProfilPengguna
             'email' => $u->Email,
             'no_hp' => $u->No_Hp,
             'nik' => self::samarkanNik($u->NIK),
-            'kode_calon' => $u->Kode_Calon,
             'role' => $role,
             'roleLabel' => IdentitasShell::labelPeran($role),
-            'adalahAdmin' => $adminis,
 
             // ── MASA BERLAKU AKUN ────────────────────────────────────────
             'status' => $u->Status,
@@ -87,13 +61,8 @@ class ProfilPengguna
             'pwdChangedAt' => $u->Pwd_Changed_At,
             'terdaftarSejak' => $u->Created_At,
 
-            // ── KEPEGAWAIAN (admin yang ditautkan ke Karyawan) ───────────
-            'kodeKaryawan' => $u->Kode_Karyawan,
-            'karyawanNama' => self::namaKaryawan($u->Kode_Karyawan),
-
-            // ── RINGKASAN SESUAI PERAN ───────────────────────────────────
-            'ringkasan' => $adminis ? null : self::ringkasanLamaran($userId),
-            'akses' => $adminis ? self::ringkasanAkses() : null,
+            // ── RINGKASAN LAMARAN ────────────────────────────────────────
+            'ringkasan' => self::ringkasanLamaran($userId),
         ];
     }
 
@@ -115,7 +84,7 @@ class ProfilPengguna
                 ->groupBy('Status')
                 ->pluck('Jumlah', 'Status');
         } catch (\Throwable $e) {
-            Log::channel('web_career')->warning('Ringkasan lamaran profil gagal: ' . $e->getMessage());
+            Log::warning('Ringkasan lamaran profil gagal: '.$e->getMessage());
 
             return ['total' => 0, 'berjalan' => 0, 'lulus' => 0, 'gugur' => 0, 'selesai' => 0];
         }
@@ -131,25 +100,6 @@ class ProfilPengguna
         ];
     }
 
-    /**
-     * Ringkasan hak akses admin — dibaca dari PAKET SESI, bukan dari DB.
-     *
-     * Sengaja: paket sesi itulah yang benar-benar menentukan apa yang bisa
-     * dibuka akun ini sampai ia login lagi. Menghitung ulang dari DB akan
-     * menampilkan angka yang lebih besar daripada yang sungguh berlaku tepat
-     * setelah admin lain menambah aksesnya — dan pemiliknya akan mengira
-     * menunya rusak karena jumlahnya tidak cocok dengan yang terlihat.
-     */
-    private static function ringkasanAkses(): array
-    {
-        $izin = (array) session('career_akses.permissions', []);
-
-        return [
-            'halaman' => count($izin),
-            'aksi' => array_sum(array_map(fn ($a) => count((array) $a), $izin)),
-        ];
-    }
-
     /** Nama klasifikasi dari masternya — bukan daftar tetap yang ikut basi. */
     private static function labelKlasifikasi(?string $kode): ?string
     {
@@ -161,31 +111,6 @@ class ProfilPengguna
             return DB::table('N_WEB_CAREERS_Klasifikasi_Akun')->where('Kode', $kode)->value('Nama') ?: $kode;
         } catch (\Throwable $e) {
             return $kode;
-        }
-    }
-
-    /**
-     * Nama karyawan pemilik Kode_Karyawan.
-     *
-     * Kueri terpisah dan dibungkus try: tabel Karyawan milik HRIS, jadi ia
-     * bisa saja belum ada di basis data pengembangan. Halaman profil tidak
-     * boleh ikut mati hanya karena satu baris pelengkap tidak bisa dibaca.
-     */
-    private static function namaKaryawan(?string $kode): ?string
-    {
-        if (! $kode) {
-            return null;
-        }
-
-        try {
-            return DB::table('Karyawan')
-                ->where('Kode_Perusahaan', self::KODE_PERUSAHAAN)
-                ->where('Kode_Karyawan', $kode)
-                ->value('Nama');
-        } catch (\Throwable $e) {
-            Log::channel('web_career')->warning('Nama karyawan profil gagal: ' . $e->getMessage());
-
-            return null;
         }
     }
 

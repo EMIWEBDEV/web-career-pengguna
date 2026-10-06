@@ -75,7 +75,7 @@ class BerkasDrafDaftarTest extends TestCase
                 'nama' => 'cv.pdf', 'path' => 'a/cv.pdf', 'ukuran' => 10, 'mime' => 'application/pdf'],
         ]);
 
-        $jumlah = FormulirDrafController::jadikanPermanen(1, 9, 77, []);
+        $jumlah = count(FormulirDrafController::jadikanPermanen(1, 9, 77, []));
 
         $this->assertSame(1, $jumlah);
         $this->assertSame('dok_cv', DB::table('N_WEB_CAREERS_Formulir_Berkas')->value('Field_Key'));
@@ -87,7 +87,7 @@ class BerkasDrafDaftarTest extends TestCase
             'dok_cv' => ['nama' => 'cv.pdf', 'path' => 'a/cv.pdf', 'ukuran' => 10, 'mime' => 'application/pdf'],
         ]);
 
-        $jumlah = FormulirDrafController::jadikanPermanen(1, 9, 77, []);
+        $jumlah = count(FormulirDrafController::jadikanPermanen(1, 9, 77, []));
 
         $this->assertSame(1, $jumlah);
         $this->assertSame('a/cv.pdf', DB::table('N_WEB_CAREERS_Formulir_Berkas')->value('Path_File'));

@@ -152,8 +152,8 @@ return [
     | dari controller lewat SeoMeta::set(), jadi tidak ada di sini.
     |
     | 'noindex' => true untuk halaman yang tidak pantas muncul di Google
-    | (panel admin, portal kandidat, formulir bertoken) — pratinjau berbagi
-    | TETAP jalan, hanya indeksnya yang ditahan.
+    | (portal kandidat, formulir bertoken) — pratinjau berbagi TETAP jalan,
+    | hanya indeksnya yang ditahan.
     */
     'pages' => [
         // ── Publik ────────────────────────────────────────────────────────
@@ -196,20 +196,17 @@ return [
     | AWALAN NAMA RUTE YANG SELALU noindex
     |--------------------------------------------------------------------------
     | Jaring pengaman untuk rute yang belum/tidak akan didaftarkan di 'pages'.
-    | Sengaja memakai NAMA rute, bukan path: panel admin dan halaman publik
+    | Sengaja memakai NAMA rute, bukan path: halaman berakun dan halaman publik
     | sama-sama berada di bawah path /karir, jadi awalan path tidak bisa
-    | membedakan keduanya. Modul admin baru otomatis ikut terlindungi karena
-    | seluruh grupnya bernama 'career.admin.*'.
+    | membedakan keduanya.
     */
     'noindex_route_prefixes' => [
-        'career.admin.',
         'career.portal.',
         'career.api.',
         'career.lamaran.',
         'career.referensi.',
-        'career.webhook.',
-        'career.laporan.',
         'career.feedback.',
-        'career.diagnostik.',
+        'career.konfirmasi.',
+        'career.surat.',
     ],
 ];

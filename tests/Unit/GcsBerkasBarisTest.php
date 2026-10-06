@@ -9,10 +9,9 @@ use Tests\TestCase;
 /**
  * Dua unggahan untuk FIELD YANG SAMA tidak boleh mendarat di path yang sama.
  *
- * unggah() sengaja deterministik dan tetap begitu untuk berkas biasa. Untuk
- * baris berulang, determinisme itulah yang membuat sertifikat kedua menimpa
- * yang pertama di bucket — jebakan yang komentarnya sudah tertulis di
- * unggahGambarCatatan() tapi tidak pernah diterapkan ke jalur ini.
+ * Path deterministik membuat sertifikat kedua menimpa yang pertama — dan dua
+ * kandidat bernama sama di hari yang sama saling menimpa CV. Karena itu
+ * berkas kandidat SELALU lewat unggahUnik() ke bucket karantina.
  */
 class GcsBerkasBarisTest extends TestCase
 {
@@ -21,8 +20,8 @@ class GcsBerkasBarisTest extends TestCase
         Storage::fake(GcsBerkas::DISK);
         $gcs = app(GcsBerkas::class);
 
-        $a = $gcs->unggahBaris('formulir-tahap/2026/08/12/budi', 'sert_file', 'pdf', 'isi-a');
-        $b = $gcs->unggahBaris('formulir-tahap/2026/08/12/budi', 'sert_file', 'pdf', 'isi-b');
+        $a = $gcs->unggahUnik('formulir-tahap/2026/08/12/budi', 'sert_file', 'pdf', 'isi-a');
+        $b = $gcs->unggahUnik('formulir-tahap/2026/08/12/budi', 'sert_file', 'pdf', 'isi-b');
 
         $this->assertNotSame($a, $b);
         $this->assertSame('isi-a', Storage::disk(GcsBerkas::DISK)->get($a));
@@ -32,26 +31,15 @@ class GcsBerkasBarisTest extends TestCase
     public function test_path_tetap_berada_di_folder_dan_ekstensi_yang_benar(): void
     {
         Storage::fake(GcsBerkas::DISK);
-        $gcs = app(GcsBerkas::class);
 
-        $p = $gcs->unggahBaris('formulir-tahap/2026/08/12/budi', 'sert_file', 'PDF', 'isi');
+        $p = app(GcsBerkas::class)->unggahUnik('formulir-tahap/2026/08/12/budi', 'sert_file', 'JPEG', 'isi');
 
-        $this->assertStringStartsWith('formulir-tahap/2026/08/12/budi/sert-file/', $p);
-        $this->assertStringEndsWith('.pdf', $p);
+        $this->assertStringStartsWith('formulir-tahap/2026/08/12/budi/sert-file/sert-file-', $p);
+        $this->assertStringEndsWith('.jpg', $p);
     }
 
-    /** unggah() yang lama TIDAK boleh berubah — berkas biasa bergantung padanya. */
-    public function test_unggah_biasa_tetap_deterministik(): void
+    public function test_berkas_kandidat_masuk_bucket_karantina(): void
     {
-        Storage::fake(GcsBerkas::DISK);
-        $gcs = app(GcsBerkas::class);
-
-        $a = $gcs->unggah('formulir-tahap/2026/08/12/budi', 'dok_cv', 'pdf', 'isi-a');
-        $b = $gcs->unggah('formulir-tahap/2026/08/12/budi', 'dok_cv', 'pdf', 'isi-b');
-
-        // slug() memangkas awalan dok_/file_/upload_ (GcsBerkas.php:191) — itu
-        // sebabnya berkas dok_cv mendarat di folder "cv", bukan "dok-cv".
-        $this->assertSame($a, $b);
-        $this->assertSame('formulir-tahap/2026/08/12/budi/cv/cv.pdf', $a);
+        $this->assertSame('karantina', GcsBerkas::DISK);
     }
 }

@@ -194,20 +194,6 @@ final class BerkasFormulir
         return $slot['terlihat'] && ($slot['wajib'] || $slot['nama'] !== '');
     }
 
-    /** Pola `accept` untuk input berkas di layar admin, dari format yang sah. */
-    public static function acceptDari(array $ekstensi): string
-    {
-        $out = [];
-        foreach ($ekstensi as $e) {
-            $out[] = '.' . $e;
-            if ($e === 'jpg') {
-                $out[] = '.jpeg';
-            }
-        }
-
-        return implode(',', $out);
-    }
-
     /** Penilai `ada` untuk daftar Berkas_Json milik draf formulir tahap. */
     public static function adaDiDaftar(array $daftar): callable
     {

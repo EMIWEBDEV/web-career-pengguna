@@ -145,13 +145,7 @@
                     </div>
                     <FaqAccordion v-else :items="faqTersaring" show-detail :initial-open="slugAwal" @open="saatDibuka">
                         <template #aksi="{ item }">
-                            <FaqAksi
-                                :item="item"
-                                :status="statusVote[item.id]"
-                                :tersalin="tersalin === item.slug"
-                                @vote="kirimVote"
-                                @salin="salinTautan"
-                            />
+                            <FaqAksi :item="item" :tersalin="tersalin === item.slug" @salin="salinTautan" />
                         </template>
                     </FaqAccordion>
                 </section>
@@ -184,13 +178,7 @@
                             @open="saatDibuka"
                         >
                             <template #aksi="{ item }">
-                                <FaqAksi
-                                    :item="item"
-                                    :status="statusVote[item.id]"
-                                    :tersalin="tersalin === item.slug"
-                                    @vote="kirimVote"
-                                    @salin="salinTautan"
-                                />
+                                <FaqAksi :item="item" :tersalin="tersalin === item.slug" @salin="salinTautan" />
                             </template>
                         </FaqAccordion>
                     </section>
@@ -227,7 +215,6 @@
 
 <script setup>
 import { Head, Link } from '@inertiajs/vue3';
-import axios from 'axios';
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import CareerLayout from './Layouts/CareerLayout.vue';
 import FaqAccordion from './components/FaqAccordion.vue';
@@ -302,36 +289,15 @@ function bacaHash() {
     nextTick(() => setTimeout(() => scrollToId('faq-' + hash), 220));
 }
 
-// ── Penghitung dilihat ──────────────────────────────────────
-const sudahDicatat = new Set();
-
+// ── Pertanyaan yang dibuka → tautannya di bilah alamat ─────────
 function saatDibuka(slug) {
-    const item = faq.value.find((f) => f.slug === slug);
-    if (!item || sudahDicatat.has(slug)) return;
-    sudahDicatat.add(slug);
-
+    if (!faq.value.some((f) => f.slug === slug)) return;
     try {
         window.history.replaceState(null, '', '#' + slug);
     } catch (e) {}
-
-    axios.post(`/api/v1/karir/faq/${item.id}/dilihat`).catch(() => {});
 }
 
-// ── Penilaian "membantu" ────────────────────────────────────
-const statusVote = ref({});
 const tersalin = ref('');
-
-async function kirimVote({ id, membantu }) {
-    if (statusVote.value[id]) return;
-    statusVote.value = { ...statusVote.value, [id]: 'mengirim' };
-
-    try {
-        await axios.post(`/api/v1/karir/faq/${id}/membantu`, { membantu });
-        statusVote.value = { ...statusVote.value, [id]: 'selesai' };
-    } catch (e) {
-        statusVote.value = { ...statusVote.value, [id]: e?.response?.status === 409 ? 'selesai' : 'gagal' };
-    }
-}
 
 async function salinTautan(slug) {
     const url = `${window.location.origin}/karir/faq#${slug}`;

@@ -155,20 +155,4 @@ class KatalogPrefill
 
         return $out;
     }
-
-    /** Daftar untuk dropdown "Isi otomatis dari" di Master Formulir. */
-    public static function untukEditor(): array
-    {
-        $out = [];
-        foreach (self::DEFINISI as $kunci => $def) {
-            $out[] = [
-                'kunci' => $kunci,
-                'label' => $def['label'],
-                'konteks' => $def['konteks'],
-                'ket' => $def['ket'],
-            ];
-        }
-
-        return $out;
-    }
 }

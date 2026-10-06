@@ -24,15 +24,6 @@ class FormulirSchema
         }
     }
 
-    public static function punyaKolomDrafSnapshot(): bool
-    {
-        try {
-            return Skema::adaKolom('N_WEB_CAREERS_Formulir_Draf', 'Schema_Snapshot_Json');
-        } catch (\Throwable $e) {
-            return false;
-        }
-    }
-
     public static function publishedByKode(?string $kode): ?array
     {
         if (! $kode) {
@@ -125,23 +116,6 @@ class FormulirSchema
         return $form ? self::payload($form, self::versiPublished((int) $form->Id_Master_Formulir)) : null;
     }
 
-    /** Semua `key` field di sebuah schema (langkah->bagian->field), rata. */
-    public static function keyField(?array $schema): array
-    {
-        $keys = [];
-        foreach (($schema['langkah'] ?? []) as $langkah) {
-            foreach (($langkah['bagian'] ?? []) as $bagian) {
-                foreach (($bagian['field'] ?? []) as $field) {
-                    if (! empty($field['key'])) {
-                        $keys[] = $field['key'];
-                    }
-                }
-            }
-        }
-
-        return array_values(array_unique($keys));
-    }
-
     public static function payload(?object $form, ?object $versi): array
     {
         $schema = $versi ? (json_decode($versi->Schema_Json ?: '{}', true) ?: null) : null;
@@ -149,6 +123,7 @@ class FormulirSchema
 
         return [
             'id' => $form?->Id_Master_Formulir ? \Vinkla\Hashids\Facades\Hashids::encode($form->Id_Master_Formulir) : null,
+            'realId' => $form?->Id_Master_Formulir ? (int) $form->Id_Master_Formulir : null,
             'kode' => $form->Kode ?? null,
             'nama' => $form->Nama ?? null,
             'komponen' => $form->Komponen_Kode ?? ($schema['fallback_komponen'] ?? null),

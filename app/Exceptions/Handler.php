@@ -116,8 +116,7 @@ class Handler extends ExceptionHandler
             $referensi = strtoupper(substr(md5($request->fullUrl() . microtime()), 0, 8));
 
             if ($status >= 500) {
-                \Illuminate\Support\Facades\Log::channel('web_career')
-                    ->error("[ERR-{$referensi}] {$status} {$request->fullUrl()} — " . $e->getMessage());
+                \Illuminate\Support\Facades\Log::error("[ERR-{$referensi}] {$status} {$request->fullUrl()} — " . $e->getMessage());
             }
 
             // Judul tab halaman galat disamakan dengan yang nanti dipasang
@@ -128,7 +127,7 @@ class Handler extends ExceptionHandler
             return Inertia::render('Error', [
                 'status' => $status,
                 'message' => $this->errorMessageFor($status),
-                'homeUrl' => \App\Http\Middleware\CareerRole::beranda(session('career_auth.role')),
+                'homeUrl' => \App\Support\Career\Shell\IdentitasShell::beranda(),
                 'referensi' => $referensi,
             ])->toResponse($request)->setStatusCode($status);
         } catch (Throwable $inertiaError) {
@@ -137,7 +136,7 @@ class Handler extends ExceptionHandler
             // Kegagalannya DICATAT: tanpa ini, halaman error desain bisa diam-diam
             // tidak pernah tampil dan tidak ada yang tahu sebabnya.
             try {
-                \Illuminate\Support\Facades\Log::channel('web_career')->error(
+                \Illuminate\Support\Facades\Log::error(
                     '[ERROR-PAGE] gagal merender halaman status ' . $status . ': '
                     . get_class($inertiaError) . ' — ' . $inertiaError->getMessage()
                     . ' @ ' . $inertiaError->getFile() . ':' . $inertiaError->getLine()

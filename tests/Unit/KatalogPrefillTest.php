@@ -92,16 +92,4 @@ class KatalogPrefillTest extends TestCase
         $this->assertArrayHasKey('hp', $hasil);
         $this->assertNull($hasil['hp']);
     }
-
-    public function test_untuk_editor_memberi_label_dan_konteks_tiap_kunci(): void
-    {
-        $daftar = KatalogPrefill::untukEditor();
-
-        $this->assertNotEmpty($daftar);
-        foreach ($daftar as $baris) {
-            $this->assertArrayHasKey('kunci', $baris);
-            $this->assertNotEmpty($baris['label']);
-            $this->assertNotEmpty($baris['konteks']);
-        }
-    }
 }

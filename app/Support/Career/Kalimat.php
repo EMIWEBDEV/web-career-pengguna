@@ -166,7 +166,7 @@ final class Kalimat
         }
         $sudah = true;
         try {
-            \Illuminate\Support\Facades\Log::channel('web_career')->warning('[KALIMAT] '.$pesan);
+            \Illuminate\Support\Facades\Log::warning('[KALIMAT] '.$pesan);
         } catch (\Throwable $e) {
             // Di luar aplikasi (uji unit) tidak ada log — pemeriksaan tetap jalan.
         }

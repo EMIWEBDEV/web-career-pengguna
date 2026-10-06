@@ -75,7 +75,7 @@ class ReferensiController extends Controller
 
             return ResponseHelper::success($rows, 'Referensi dimuat');
         } catch (\Throwable $e) {
-            Log::channel('web_career')->error("Gagal memuat referensi {$sumber}: " . $e->getMessage());
+            Log::error("Gagal memuat referensi {$sumber}: " . $e->getMessage());
 
             return ResponseHelper::error('Gagal memuat pilihan', 500);
         }
